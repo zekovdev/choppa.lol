@@ -13,6 +13,10 @@
 #include "singletons/Settings.hpp"
 #include "util/Clipboard.hpp"
 #include "util/Helpers.hpp"
+#include "widgets/ChoppaTitlebar.hpp"
+
+#include <QPainter>
+#include <QTabBar>
 
 #ifdef USEWINSDK
 #    include <Windows.h>
@@ -81,6 +85,14 @@ BasicLoginWidget::BasicLoginWidget()
 {
     const QString logInLink = "https://chatterino.com/client_login";
     this->setLayout(&this->ui_.layout);
+
+    auto *intro =
+        new QLabel(tr("<h2>Connect Twitch</h2>Open Twitch to authorize your "
+                      "account, then paste the login information here."));
+    intro->setWordWrap(true);
+    this->ui_.layout.addWidget(intro);
+    this->ui_.layout.setAlignment(Qt::AlignTop);
+    this->ui_.layout.setSpacing(16);
 
     this->ui_.loginButton.setText("Log in (Opens in browser)");
     this->ui_.pasteCodeButton.setText("Paste login info");
@@ -242,14 +254,34 @@ void AdvancedLoginWidget::refreshButtons()
 LoginDialog::LoginDialog(QWidget *parent)
     : QDialog(parent)
 {
-    this->setMinimumWidth(300);
+    this->setFixedWidth(480);
+    this->setAttribute(Qt::WA_TranslucentBackground);
     this->setWindowFlags(
         (this->windowFlags() & ~(Qt::WindowContextHelpButtonHint)) |
-        Qt::Dialog | Qt::MSWindowsFixedSizeDialogHint);
+        Qt::Dialog | Qt::FramelessWindowHint);
 
     this->setWindowTitle("Add new account");
 
     this->setLayout(&this->ui_.mainLayout);
+    this->ui_.mainLayout.setContentsMargins(1, 1, 1, 16);
+    this->ui_.mainLayout.setSpacing(12);
+    this->ui_.mainLayout.addWidget(new ChoppaTitlebar(this));
+    auto *categories = new QHBoxLayout;
+    categories->setContentsMargins(16, 0, 16, 0);
+    auto *group = new QButtonGroup(this);
+    const QStringList names{tr("Twitch"), tr("Manual setup"), tr("Kick")};
+    for (int i = 0; i < names.size(); ++i)
+    {
+        auto *button = new QPushButton(names[i]);
+        button->setCheckable(true);
+        group->addButton(button, i);
+        categories->addWidget(button);
+        connect(button, &QPushButton::clicked, this, [this, i] {
+            this->ui_.tabWidget.setCurrentIndex(i);
+        });
+        button->setChecked(i == 0);
+    }
+    this->ui_.mainLayout.addLayout(categories);
     this->ui_.mainLayout.addWidget(&this->ui_.tabWidget);
 
     this->ui_.tabWidget.addTab(&this->ui_.basic, "Basic");
@@ -262,9 +294,56 @@ LoginDialog::LoginDialog(QWidget *parent)
                          this->close();
                      });
 
-    this->ui_.mainLayout.addWidget(&this->ui_.buttonBox);
+    auto *footer = new QHBoxLayout;
+    footer->setContentsMargins(16, 0, 16, 0);
+    footer->addWidget(&this->ui_.buttonBox);
+    this->ui_.mainLayout.addLayout(footer);
 
     this->ui_.tabWidget.addTab(&this->ui_.kick, "Kick");
+    this->ui_.tabWidget.tabBar()->hide();
+    this->ui_.kick.setProperty("choppaLoginSurface", true);
+    for (int index = 0; index < this->ui_.tabWidget.count(); ++index)
+    {
+        auto *page = this->ui_.tabWidget.widget(index);
+        page->layout()->setContentsMargins(16, 8, 16, 8);
+        page->layout()->setSpacing(12);
+    }
+    auto fitPage = [this](int index) {
+        auto *page = this->ui_.tabWidget.widget(index);
+        const int width = this->width() - 2;
+        const int preferred = page->layout()->hasHeightForWidth()
+                                  ? page->layout()->totalHeightForWidth(width)
+                                  : page->sizeHint().height();
+        const int height =
+            std::max(preferred, page->minimumSizeHint().height()) + 8;
+        this->ui_.tabWidget.setFixedHeight(height);
+        this->adjustSize();
+    };
+    // Resize only on navigation, not when member pages are being destroyed.
+    connect(group, &QButtonGroup::idClicked, this, fitPage);
+    this->setStyleSheet(R"(
+        QDialog { color: white; }
+        QLabel { color: #cccccc; font: 12px 'Outfit'; background: transparent; border: none; }
+        QTabWidget::pane { border: none; background: #111111; }
+        QTabWidget > QWidget { border: none; }
+        QPushButton { border: 1px solid #303030; border-radius: 6px; background: #1c1c1c; color: #cccccc; padding: 8px 12px; text-align: center; font: 12px 'Outfit'; }
+        QPushButton:hover, QPushButton:focus { background: #303030; color: white; }
+        QPushButton:checked { background: #dddddd; color: #111111; }
+        QLineEdit { border: 1px solid #303030; border-radius: 6px; background: #1a1a1a; color: white; padding: 8px; }
+        QLineEdit:focus { border-color: #777777; }
+    )");
+    this->ensurePolished();
+    fitPage(0);
+}
+
+void LoginDialog::paintEvent(QPaintEvent *)
+{
+    QPainter painter(this);
+    painter.setRenderHint(QPainter::Antialiasing);
+    painter.setPen(QColor("#383838"));
+    painter.setBrush(QColor("#111111"));
+    painter.drawRoundedRect(QRectF(this->rect()).adjusted(0.5, 0.5, -0.5, -0.5),
+                            7, 7);
 }
 
 }  // namespace chatterino

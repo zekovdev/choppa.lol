@@ -48,6 +48,7 @@ public:
                  const ChannelPtr &openingChannel);
 
 protected:
+    void paintEvent(QPaintEvent *event) override;
     void themeChangedEvent() override;
     void scaleChangedEvent(float scale) override;
     void windowDeactivationEvent() override;

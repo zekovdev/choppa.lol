@@ -8,6 +8,7 @@
 
 #include <pajlada/settings/setting.hpp>
 #include <QFrame>
+#include <QGridLayout>
 #include <QPushButton>
 #include <QStackedLayout>
 #include <QVBoxLayout>
@@ -16,6 +17,7 @@
 #include <functional>
 
 class QLineEdit;
+class QLabel;
 
 namespace chatterino {
 
@@ -49,7 +51,10 @@ public:
 
 protected:
     void scaleChangedEvent(float newDpi) override;
+    void themeChangedEvent() override;
     void showEvent(QShowEvent *) override;
+    void closeEvent(QCloseEvent *event) override;
+    void keyPressEvent(QKeyEvent *event) override;
 
 private:
     void refresh();
@@ -73,7 +78,9 @@ private:
 
     struct {
         QWidget *tabContainerContainer{};
-        QVBoxLayout *tabContainer{};
+        QGridLayout *tabContainer{};
+        QLabel *pageTitle{};
+        QLabel *emptySearch{};
         QStackedLayout *pageStack{};
         QPushButton *okButton{};
         QPushButton *cancelButton{};
@@ -83,6 +90,7 @@ private:
     SettingsDialogTab *selectedTab_{};
     SettingsDialogTab *lastSelectedByUser_{};
     float dpi_ = 1.0F;
+    bool saveOnClose_ = false;
 
     friend class SettingsDialogTab;
 };

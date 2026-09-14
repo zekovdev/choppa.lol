@@ -24,7 +24,8 @@ public:
     ///
     /// If closeAutomatically is set, the window will close when losing focus,
     /// and the window will be frameless.
-    DraggablePopup(bool closeAutomatically, QWidget *parent);
+    DraggablePopup(bool closeAutomatically, QWidget *parent,
+                   FlagsEnum<Flags> extraFlags = {});
 
 protected:
     void mousePressEvent(QMouseEvent *event) override;

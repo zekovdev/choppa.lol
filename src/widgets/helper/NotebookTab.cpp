@@ -8,19 +8,26 @@
 #include "common/Channel.hpp"
 #include "common/Common.hpp"
 #include "common/QLogging.hpp"
+#include "controllers/emotes/EmoteController.hpp"
 #include "controllers/hotkeys/HotkeyCategory.hpp"
 #include "controllers/hotkeys/HotkeyController.hpp"
+#include "messages/Emote.hpp"
+#include "messages/EmoteResolver.hpp"
+#include "messages/Image.hpp"
+#include "messages/ImageSet.hpp"
 #include "singletons/Fonts.hpp"
+#include "singletons/helper/GifTimer.hpp"
 #include "singletons/Settings.hpp"
 #include "singletons/Theme.hpp"
 #include "singletons/WindowManager.hpp"
+#include "util/EmojiText.hpp"
 #include "util/Helpers.hpp"
 #include "widgets/dialogs/SettingsDialog.hpp"
+#include "widgets/helper/EmoteInputLineEdit.hpp"
 #include "widgets/Notebook.hpp"
 #include "widgets/splits/DraggedSplit.hpp"
 #include "widgets/splits/Split.hpp"
 #include "widgets/splits/SplitContainer.hpp"
-#include "widgets/Window.hpp"
 
 #include <boost/bind/bind.hpp>
 #include <boost/container_hash/hash.hpp>
@@ -33,10 +40,10 @@
 #include <QLineEdit>
 #include <QMimeData>
 #include <QPainter>
+#include <QPointer>
+#include <QTimer>
 
 #include <algorithm>
-
-using namespace Qt::StringLiterals;
 
 namespace chatterino {
 namespace {
@@ -116,9 +123,30 @@ NotebookTab::NotebookTab(Notebook *notebook)
         },
         this->managedConnections_);
 
+    // Animated emotes/emojis in the tab title repaint with the GIF timer
+    this->managedConnections_.managedConnect(
+        getApp()->getEmotes()->getGIFTimer()->signal, [this] {
+            if (this->titleAnimated_)
+            {
+                this->update();
+            }
+        });
+
+    // Image loads only trigger chat re-layouts; repaint the tab too so
+    // title emotes appear without needing a hover
+    this->managedConnections_.managedConnect(
+        getApp()->getWindows()->layoutRequested, [this](Channel *) {
+            if (this->titleImagesPending_)
+            {
+                this->titleImagesPending_ = false;
+                this->updateSize();
+            }
+            this->update();
+        });
+
     this->setMouseTracking(true);
 
-    this->menu_.addAction(u"Rename Tab…"_s, this, [this]() {
+    this->menu_.addAction("Rename Tab", [this]() {
         this->showRenameDialog();
     });
 
@@ -169,6 +197,25 @@ NotebookTab::NotebookTab(Notebook *notebook)
     this->menu_.addSeparator();
 
     this->notebook_->addNotebookActionsToMenu(&this->menu_);
+}
+
+void NotebookTab::showContextMenu(const QPoint &globalPosition)
+{
+    const int visibleTabCount = this->notebook_->getVisibleTabCount();
+    const int selectedTabIndex = this->notebook_->visibleIndexOf(this->page);
+    this->closeMultipleTabsMenu_->setEnabled(visibleTabCount > 1);
+    this->closeTabsBeforeSelectedAction_->setEnabled(selectedTabIndex > 0);
+    this->closeTabsAfterSelectedAction_->setEnabled(
+        selectedTabIndex != -1 && selectedTabIndex < visibleTabCount - 1);
+    this->menu_.setStyleSheet(R"(
+        QMenu { background: #111111; color: #dddddd; border: 1px solid #383838; padding: 6px; font: 12px 'Outfit'; }
+        QMenu::item { padding: 7px 20px; border-radius: 4px; }
+        QMenu::item:selected { background: #303030; color: white; }
+        QMenu::item:disabled { color: #777777; }
+        QMenu::separator { height: 1px; background: #303030; margin: 5px; }
+    )");
+    this->closeMultipleTabsMenu_->setStyleSheet(this->menu_.styleSheet());
+    this->menu_.popup(globalPosition);
 }
 
 void NotebookTab::recreateCloseMultipleTabsMenu(
@@ -346,17 +393,20 @@ void NotebookTab::recreateCloseMultipleTabsMenu(
 
 void NotebookTab::showRenameDialog()
 {
+    // The dialog is shown non-modally so the emote picker & completion popups
+    // (separate windows) aren't blocked by an application-modal dialog.
     auto *dialog = new QDialog(this);
+    dialog->setAttribute(Qt::WA_DeleteOnClose);
 
     auto *vbox = new QVBoxLayout;
 
-    auto *lineEdit = new QLineEdit;
-    lineEdit->setText(this->getCustomTitle());
-    lineEdit->setPlaceholderText(this->getDefaultTitle());
-    lineEdit->selectAll();
+    auto *input = new EmoteInputLineEdit(this->channelForEmotes(), dialog);
+    input->setText(this->getCustomTitle());
+    input->setPlaceholderText(this->getDefaultTitle());
+    input->selectAll();
 
     vbox->addWidget(new QLabel("Name:"));
-    vbox->addWidget(lineEdit);
+    vbox->addWidget(input);
     vbox->addStretch(1);
 
     auto *buttonBox =
@@ -365,15 +415,21 @@ void NotebookTab::showRenameDialog()
     vbox->addWidget(buttonBox);
     dialog->setLayout(vbox);
 
-    QObject::connect(buttonBox, &QDialogButtonBox::accepted, [dialog] {
-        dialog->accept();
+    QPointer<NotebookTab> self(this);
+    auto accept = [self, dialog, input] {
+        if (self)
+        {
+            self->setCustomTitle(input->text());
+        }
         dialog->close();
-    });
+    };
 
-    QObject::connect(buttonBox, &QDialogButtonBox::rejected, [dialog] {
-        dialog->reject();
+    QObject::connect(buttonBox, &QDialogButtonBox::accepted, dialog, accept);
+    QObject::connect(buttonBox, &QDialogButtonBox::rejected, dialog, [dialog] {
         dialog->close();
     });
+    QObject::connect(input->lineEdit(), &QLineEdit::returnPressed, dialog,
+                     accept);
 
     dialog->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
     dialog->setMinimumSize(dialog->minimumSizeHint().width() + 50,
@@ -385,11 +441,25 @@ void NotebookTab::showRenameDialog()
 
     dialog->setWindowTitle("Rename Tab");
 
-    if (dialog->exec() == QDialog::Accepted)
+    dialog->show();
+    input->setFocus();
+}
+
+ChannelPtr NotebookTab::channelForEmotes() const
+{
+    if (auto *container = dynamic_cast<SplitContainer *>(this->page))
     {
-        QString newTitle = lineEdit->text();
-        this->setCustomTitle(newTitle);
+        if (auto *split = container->getSelectedSplit())
+        {
+            return split->getChannel();
+        }
+        auto splits = container->getSplits();
+        if (!splits.empty())
+        {
+            return splits.front()->getChannel();
+        }
     }
+    return Channel::getEmpty();
 }
 
 void NotebookTab::themeChangedEvent()
@@ -402,7 +472,20 @@ void NotebookTab::themeChangedEvent()
 
 void NotebookTab::growWidth(int width)
 {
-    this->growWidth_ = width;
+    if (this->growWidth_ != width)
+    {
+        this->growWidth_ = width;
+        this->updateSize();
+    }
+    else
+    {
+        this->growWidth_ = width;
+    }
+}
+
+int NotebookTab::normalTabWidth() const
+{
+    return this->normalTabWidthForHeight(this->height());
 }
 
 int NotebookTab::normalTabWidthForHeight(int height) const
@@ -410,19 +493,23 @@ int NotebookTab::normalTabWidthForHeight(int height) const
     float scale = this->scale();
     int width = 0;
 
-    auto metrics =
-        getApp()->getFonts()->getFontMetrics(FontStyle::UiTabs, scale);
+    // Measure against this widget as a paint device so the metrics match the
+    // DPI the text is actually rendered at; plain metrics can under-measure
+    // on multi-monitor setups and crop the last characters.
+    QFontMetricsF metrics{
+        getApp()->getFonts()->getFont(FontStyle::UiTabs, scale), this};
 
     float compactDivider = getCompactDivider(getSettings()->tabStyle);
+    qreal titleWidth = metrics.horizontalAdvance(this->getTitle());
     if (this->hasXButton())
     {
-        width = static_cast<int>(metrics.horizontalAdvance(this->getTitle()) +
-                                 (32 / compactDivider * scale));
+        width =
+            static_cast<int>(titleWidth + (32 / compactDivider * scale)) + 2;
     }
     else
     {
-        width = static_cast<int>(metrics.horizontalAdvance(this->getTitle()) +
-                                 (16 / compactDivider * scale));
+        width =
+            static_cast<int>(titleWidth + (16 / compactDivider * scale)) + 2;
     }
 
     if (static_cast<float>(height) > 150 * scale)
@@ -431,63 +518,33 @@ int NotebookTab::normalTabWidthForHeight(int height) const
     }
     else
     {
-        width = std::clamp(width, height, static_cast<int>(150 * scale));
+        // Only limit a tab's width by the notebook itself - a tab should
+        // always show its full title unless there's truly no room for it.
+        int maxWidth =
+            std::max(static_cast<int>(150 * scale),
+                     this->notebook_->width() - static_cast<int>(8 * scale));
+        width = std::clamp(width, height, maxWidth);
     }
 
     return width;
 }
 
-void NotebookTab::refreshAndCommitSize(bool notify)
-{
-    this->refreshSize();
-    this->commitSize(notify);
-}
-
-void NotebookTab::refreshSize()
+void NotebookTab::updateSize()
 {
     float scale = this->scale();
     auto height = static_cast<int>(NOTEBOOK_TAB_HEIGHT * scale);
     int width = this->normalTabWidthForHeight(height);
-    this->computedMinimumSize = {width, height};
-}
 
-void NotebookTab::commitSize(bool notify)
-{
-    auto size = this->computedMinimumSize;
-    if (size.width() < this->growWidth_)
+    if (width < this->growWidth_)
     {
-        size.setWidth(this->growWidth_);
+        width = this->growWidth_;
     }
 
-    if (this->size() != size)
+    if (this->width() != width || this->height() != height)
     {
-        this->resize(size);
-        if (notify)
-        {
-            this->notebook_->refresh();
-        }
+        this->resize(width, height);
+        this->notebook_->refresh();
     }
-}
-
-QSize NotebookTab::minimumTabSize() const
-{
-    return this->computedMinimumSize;
-}
-
-int NotebookTab::minimumTabWidth() const
-{
-    return this->computedMinimumSize.width();
-}
-
-void NotebookTab::queueMove(QPoint to, bool animated)
-{
-    this->queuedMove = to;
-    this->queuedMoveAnimated = animated;
-}
-
-void NotebookTab::commitMove()
-{
-    this->moveAnimated(this->queuedMove, this->queuedMoveAnimated);
 }
 
 const QString &NotebookTab::getCustomTitle() const
@@ -497,9 +554,14 @@ const QString &NotebookTab::getCustomTitle() const
 
 void NotebookTab::setCustomTitle(const QString &newTitle)
 {
-    if (this->customTitle_ != newTitle)
+    // Drop leading/trailing spaces; the title should start and end on visible
+    // text. A title of only spaces becomes empty, which falls back to the
+    // default title.
+    auto title = newTitle.trimmed();
+
+    if (this->customTitle_ != title)
     {
-        this->customTitle_ = newTitle;
+        this->customTitle_ = title;
         this->titleUpdated();
     }
 }
@@ -543,7 +605,10 @@ void NotebookTab::titleUpdated()
     // Queue up save because: Tab title changed
     getApp()->getWindows()->queueSave();
     this->notebook_->refresh();
-    this->refreshAndCommitSize(true);
+    // The title may now contain emoji whose images still need loading, so allow
+    // the paint loop to retry again.
+    this->emojiRepaintsRemaining_ = EMOJI_LOAD_REPAINT_ATTEMPTS;
+    this->updateSize();
     this->update();
 }
 
@@ -573,13 +638,13 @@ void NotebookTab::newHighlightSourceAdded(const ChannelView &channelViewSource)
     this->removeHighlightSource(channelViewId);
     this->updateHighlightStateDueSourcesChange();
 
-    for (auto *window : getApp()->getWindows()->windows())
+    auto *splitNotebook = dynamic_cast<SplitNotebook *>(this->notebook_);
+    if (splitNotebook)
     {
-        auto &splitNotebook = window->getNotebook();
-        for (int i = 0; i < splitNotebook.getPageCount(); ++i)
+        for (int i = 0; i < splitNotebook->getPageCount(); ++i)
         {
             auto *splitContainer =
-                dynamic_cast<SplitContainer *>(splitNotebook.getPageAt(i));
+                dynamic_cast<SplitContainer *>(splitNotebook->getPageAt(i));
             if (splitContainer)
             {
                 auto *tab = splitContainer->getTab();
@@ -658,13 +723,13 @@ void NotebookTab::setSelected(bool value)
 
     if (value)
     {
-        for (auto *window : getApp()->getWindows()->windows())
+        auto *splitNotebook = dynamic_cast<SplitNotebook *>(this->notebook_);
+        if (splitNotebook)
         {
-            auto &splitNotebook = window->getNotebook();
-            for (int i = 0; i < splitNotebook.getPageCount(); ++i)
+            for (int i = 0; i < splitNotebook->getPageCount(); ++i)
             {
                 auto *splitContainer =
-                    dynamic_cast<SplitContainer *>(splitNotebook.getPageAt(i));
+                    dynamic_cast<SplitContainer *>(splitNotebook->getPageAt(i));
                 if (splitContainer)
                 {
                     auto *tab = splitContainer->getTab();
@@ -821,19 +886,17 @@ void NotebookTab::updateHighlightState(HighlightState newHighlightStyle,
 bool NotebookTab::shouldMessageHighlight(
     const ChannelView &channelViewSource) const
 {
-    for (auto *window : getApp()->getWindows()->windows())
+    auto *visibleSplitContainer =
+        dynamic_cast<SplitContainer *>(this->notebook_->getSelectedPage());
+    if (visibleSplitContainer != nullptr)
     {
-        auto *visibleSplitContainer = window->getNotebook().getSelectedPage();
-        if (visibleSplitContainer != nullptr)
+        const auto &visibleSplits = visibleSplitContainer->getSplits();
+        for (const auto &visibleSplit : visibleSplits)
         {
-            const auto &visibleSplits = visibleSplitContainer->getSplits();
-            for (const auto &visibleSplit : visibleSplits)
+            if (channelViewSource.getID() ==
+                visibleSplit->getChannelView().getID())
             {
-                if (channelViewSource.getID() ==
-                    visibleSplit->getChannelView().getID())
-                {
-                    return false;
-                }
+                return false;
             }
         }
     }
@@ -859,7 +922,7 @@ QRect NotebookTab::getDesiredRect() const
 
 void NotebookTab::tabSizeChanged()
 {
-    this->refreshAndCommitSize(true);
+    this->updateSize();
     this->update();
 }
 
@@ -894,7 +957,9 @@ void NotebookTab::paintEvent(QPaintEvent *)
     float scale = this->scale();
 
     painter.setFont(app->getFonts()->getFont(FontStyle::UiTabs, scale));
-    auto metrics = app->getFonts()->getFontMetrics(FontStyle::UiTabs, scale);
+    // Device-aware metrics; see normalTabWidthForHeight
+    QFontMetricsF metrics{app->getFonts()->getFont(FontStyle::UiTabs, scale),
+                          this};
 
     int height = int(scale * NOTEBOOK_TAB_HEIGHT);
 
@@ -1026,7 +1091,7 @@ void NotebookTab::paintEvent(QPaintEvent *)
         textRect.setRight(textRect.right() - this->height() / 2);
     }
 
-    int width = metrics.horizontalAdvance(this->getTitle());
+    qreal width = metrics.horizontalAdvance(this->getTitle());
     Qt::Alignment alignment = width > textRect.width()
                                   ? Qt::AlignLeft | Qt::AlignVCenter
                                   : Qt::AlignHCenter | Qt::AlignVCenter;
@@ -1096,7 +1161,8 @@ void NotebookTab::paintEvent(QPaintEvent *)
 bool NotebookTab::hasXButton() const
 {
     return getSettings()->showTabCloseButton &&
-           this->notebook_->getAllowUserTabManagement();
+           this->notebook_->getAllowUserTabManagement() &&
+           !this->notebook_->isNotebookLayoutLocked();
 }
 
 bool NotebookTab::shouldDrawXButton() const
@@ -1121,21 +1187,8 @@ void NotebookTab::mousePressEvent(QMouseEvent *event)
         switch (event->button())
         {
             case Qt::RightButton: {
-                this->menu_.popup(event->globalPosition().toPoint() +
-                                  QPoint(0, 8));
-
-                const int visibleTabCount =
-                    this->notebook_->getVisibleTabCount();
-                const int selectedTabIndex =
-                    this->notebook_->visibleIndexOf(this->page);
-
-                this->closeMultipleTabsMenu_->setEnabled(visibleTabCount > 1);
-
-                this->closeTabsBeforeSelectedAction_->setEnabled(
-                    selectedTabIndex > 0);
-                this->closeTabsAfterSelectedAction_->setEnabled(
-                    selectedTabIndex != -1 &&
-                    selectedTabIndex < (visibleTabCount - 1));
+                this->showContextMenu(event->globalPosition().toPoint() +
+                                      QPoint(0, 8));
             }
             break;
             default:;
@@ -1298,11 +1351,37 @@ void NotebookTab::mouseMoveEvent(QMouseEvent *event)
 
 void NotebookTab::wheelEvent(QWheelEvent *event)
 {
-    this->notebook_->scrollTabs(event);
+    const auto defaultMouseDelta = 120;
+    const auto verticalDelta = event->angleDelta().y();
+    const auto selectTab = [this](int delta) {
+        delta > 0 ? this->notebook_->selectPreviousTab()
+                  : this->notebook_->selectNextTab();
+    };
+    // If it's true
+    // Then the user uses the trackpad or perhaps the most accurate mouse
+    // Which has small delta.
+    if (std::abs(verticalDelta) < defaultMouseDelta)
+    {
+        this->mouseWheelDelta_ += verticalDelta;
+        if (std::abs(this->mouseWheelDelta_) >= defaultMouseDelta)
+        {
+            selectTab(this->mouseWheelDelta_);
+            this->mouseWheelDelta_ = 0;
+        }
+    }
+    else
+    {
+        selectTab(verticalDelta);
+    }
 }
 
 void NotebookTab::update()
 {
+    if (this->notebook_->hasExternalNavigation())
+    {
+        Q_EMIT this->notebook_->navigationChanged();
+        return;
+    }
     Button::update();
 }
 

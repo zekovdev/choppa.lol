@@ -4,7 +4,6 @@
 
 #pragma once
 
-#include "util/TabHistory.hpp"
 #include "widgets/BaseWidget.hpp"
 #include "widgets/NotebookEnums.hpp"
 
@@ -16,9 +15,7 @@
 #include <QWidget>
 
 #include <functional>
-#include <optional>
 #include <span>
-#include <vector>
 
 namespace chatterino {
 
@@ -73,13 +70,7 @@ public:
     /**
      * @brief Selects the Notebook tab containing the given page.
      **/
-    virtual void select(QWidget *page, bool focusPage = true,
-                        bool recordInHistory = true);
-
-    void selectHistoryBack(bool focusPage);
-    void selectHistoryForward(bool focusPage);
-    QWidget *getPreviousVisitedPage() const;
-    std::vector<QWidget *> getVisitHistoryPages() const;
+    virtual void select(QWidget *page, bool focusPage = true);
 
     /**
      * @brief Selects the Notebook tab at the given index. Ignores whether tabs
@@ -99,14 +90,12 @@ public:
     /**
      * @brief Selects the next visible tab. Wraps to the start if required. 
      **/
-    void selectNextTab(bool focusPage = true, bool recordInHistory = true);
+    void selectNextTab(bool focusPage = true);
 
     /**
      * @brief Selects the previous visible tab. Wraps to the end if required. 
      **/
-    void selectPreviousTab(bool focusPage = true, bool recordInHistory = true);
-
-    void scrollTabs(QWheelEvent *event);
+    void selectPreviousTab(bool focusPage = true);
 
     /**
      * @brief Selects the last visible tab. 
@@ -137,16 +126,23 @@ public:
     // Update layout and tab visibility
     void refresh();
 
+    void setExternalNavigation(bool enabled);
+    bool hasExternalNavigation() const
+    {
+        return this->externalNavigation_;
+    }
+    bool isPageVisible(int index) const;
+
+Q_SIGNALS:
+    void navigationChanged();
+
 protected:
     bool getShowTabs() const;
     void setShowTabs(bool value);
 
-    void setGrowWrappedNotebookLines(bool value);
-
     void scaleChangedEvent(float scale_) override;
     void resizeEvent(QResizeEvent *) override;
     void mousePressEvent(QMouseEvent *event) override;
-    void wheelEvent(QWheelEvent *event) override;
     void paintEvent(QPaintEvent *) override;
 
     DrawnButton *addButton_;
@@ -221,10 +217,8 @@ private:
     void updateTabVisibility();
     void resizeAddButton();
 
-    bool containsPage(QWidget *page) const;
-    std::optional<Item> findItem(QWidget *page);
-
-    void pruneInvalidHistoryEntries();
+    bool containsPage(QWidget *page);
+    Item *findItem(QWidget *page);
 
     static bool containsChild(const QObject *obj, const QObject *child);
     NotebookTab *getTabFromPage(QWidget *page);
@@ -236,17 +230,14 @@ private:
     QMenu *menu_ = nullptr;
     QWidget *selectedPage_ = nullptr;
 
-    TabHistory tabHistory_;
-
     std::vector<Button *> customButtons_;
 
     bool allowUserTabManagement_ = false;
     bool showTabs_ = true;
+    bool externalNavigation_ = false;
     bool showAddButton_ = false;
     int lineOffset_ = 20;
-    int mouseWheelDelta_ = 0;
     bool lockNotebookLayout_ = false;
-    bool growWrappedNotebookLines = false;
 
     bool refreshPaused_ = false;
     bool refreshRequested_ = false;
@@ -270,8 +261,7 @@ public:
     SplitContainer *getOrAddSelectedPage();
     /// Returns `nullptr` when no page is selected.
     SplitContainer *getSelectedPage();
-    void select(QWidget *page, bool focusPage = true,
-                bool recordInHistory = true) override;
+    void select(QWidget *page, bool focusPage = true) override;
     void themeChangedEvent() override;
 
     void addNotebookActionsToMenu(QMenu *menu) override;

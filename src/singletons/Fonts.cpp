@@ -9,7 +9,9 @@
 #include "singletons/Settings.hpp"
 #include "singletons/WindowManager.hpp"
 
+#include <QApplication>
 #include <QDebug>
+#include <QFontDatabase>
 #include <QtGlobal>
 
 namespace {
@@ -167,7 +169,7 @@ QString fontFamily(FontStyle style)
         case FontStyle::UiMediumBold:
         case FontStyle::UiTabs:
         case FontStyle::EndType:
-            return QStringLiteral(DEFAULT_FONT_FAMILY);
+            return QStringLiteral("Outfit");
     }
 
     assert(false);
@@ -180,6 +182,14 @@ namespace chatterino {
 
 Fonts::Fonts(Settings &settings)
 {
+    static const bool fontsLoaded = [] {
+        QFontDatabase::addApplicationFont(":/choppa/Outfit-Regular.ttf");
+        QFontDatabase::addApplicationFont(":/choppa/Outfit-Medium.ttf");
+        QFontDatabase::addApplicationFont(":/choppa/Outfit-SemiBold.ttf");
+        QApplication::setFont(QFont("Outfit", 10));
+        return true;
+    }();
+    (void)fontsLoaded;
     this->fontsByType_.resize(size_t(FontStyle::EndType));
 
     this->fontChangedListener.setCB([this] {

@@ -41,7 +41,7 @@ TEST(OnceFlag, waitFor)
         startedFlag.set();
         startedAckFlag.wait();
 
-        std::this_thread::sleep_for(std::chrono::milliseconds{1000});
+        std::this_thread::sleep_for(std::chrono::milliseconds{100});
         stoppedFlag.set();
     });
 
@@ -49,10 +49,10 @@ TEST(OnceFlag, waitFor)
     startedAckFlag.set();
 
     auto start = std::chrono::system_clock::now();
-    ASSERT_TRUE(stoppedFlag.waitFor(std::chrono::milliseconds{2000}));
+    ASSERT_TRUE(stoppedFlag.waitFor(std::chrono::milliseconds{200}));
     auto stop = std::chrono::system_clock::now();
 
-    ASSERT_LT(stop - start, std::chrono::milliseconds{2000});
+    ASSERT_LT(stop - start, std::chrono::milliseconds{200});
 
     start = std::chrono::system_clock::now();
     ASSERT_TRUE(stoppedFlag.waitFor(std::chrono::milliseconds{1000}));

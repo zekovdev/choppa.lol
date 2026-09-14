@@ -64,7 +64,7 @@ RestoreBackupsDialog::RestoreBackupsDialog(backup::FileData fileData,
           u"Some backups are damaged or otherwise unreadable."_s)
 {
     this->setAttribute(Qt::WA_DeleteOnClose);
-    this->setWindowTitle(u"Chatterino - Restore Backup of " %
+    this->setWindowTitle(u"Zekerino - Restore Backup of " %
                          this->fileData.fileKind % '?');
 
     auto *layout = new QVBoxLayout(this);

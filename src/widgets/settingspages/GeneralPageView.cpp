@@ -53,17 +53,21 @@ GeneralPageView *GeneralPageView::withNavigation(QWidget *parent)
 {
     auto *view = new GeneralPageView(parent);
 
-    auto *navigation =
-        wrapLayout(view->navigationLayout_ = makeLayout<QVBoxLayout>({}));
-    navigation->setSizePolicy(QSizePolicy::Maximum, QSizePolicy::Minimum);
-    view->navigationLayout_->setAlignment(Qt::AlignTop);
-    view->navigationLayout_->addSpacing(6);
-
-    view->setLayout(makeLayout<QHBoxLayout>({
-        view->contentScrollArea_,
-        new QSpacerItem(16, 1),
-        navigation,
-    }));
+    auto *layout = new QVBoxLayout(view);
+    layout->setContentsMargins(0, 0, 0, 0);
+    auto *header = new QHBoxLayout;
+    header->addWidget(new QLabel(tr("Jump to section")));
+    view->sectionPicker_ = new QComboBox;
+    view->sectionPicker_->setAccessibleName(tr("Settings section"));
+    header->addWidget(view->sectionPicker_, 1);
+    layout->addLayout(header);
+    layout->addWidget(view->contentScrollArea_, 1);
+    QObject::connect(
+        view->sectionPicker_, &QComboBox::activated, view, [view](int index) {
+            if (index >= 0 && index < static_cast<int>(view->groups_.size()))
+                view->contentScrollArea_->verticalScrollBar()->setValue(
+                    view->groups_[index].title->y());
+        });
 
     QObject::connect(view->contentScrollArea_->verticalScrollBar(),
                      &QScrollBar::valueChanged, view, [view] {
@@ -123,7 +127,7 @@ TitleLabel *GeneralPageView::addTitle(const QString &title)
     }
 
     // title
-    auto *label = new TitleLabel(title + ":");
+    auto *label = new TitleLabel(title);
     this->addWidget(label);
 
     NavigationLabel *navLabel = nullptr;
@@ -144,6 +148,8 @@ TitleLabel *GeneralPageView::addTitle(const QString &title)
 
     // groups
     this->groups_.push_back(Group{title, label, navLabel, nullptr, {}});
+    if (this->sectionPicker_)
+        this->sectionPicker_->addItem(title);
 
     if (this->groups_.size() == 1)
     {
@@ -189,10 +195,8 @@ ComboBox *GeneralPageView::addDropdown(const QString &text,
 
 void GeneralPageView::addNavigationSpacing()
 {
-    assert(this->navigationLayout_ != nullptr &&
-           "addNavigationSpacing used without navigation");
-
-    this->navigationLayout_->addSpacing(24);
+    if (this->navigationLayout_)
+        this->navigationLayout_->addSpacing(24);
 }
 
 DescriptionLabel *GeneralPageView::addDescription(const QString &text)
@@ -219,6 +223,8 @@ void GeneralPageView::addSeparator()
 
 bool GeneralPageView::filterElements(const QString &query)
 {
+    if (this->sectionPicker_)
+        this->sectionPicker_->setEnabled(query.isEmpty());
     bool any{};
 
     for (auto &&group : this->groups_)
@@ -339,6 +345,16 @@ bool GeneralPageView::filterElements(const QString &query)
 
 void GeneralPageView::updateNavigationHighlighting()
 {
+    if (this->sectionPicker_ && !this->groups_.empty())
+    {
+        const int scrollY =
+            this->contentScrollArea_->verticalScrollBar()->value();
+        int current = 0;
+        for (int i = 0; i < static_cast<int>(this->groups_.size()); ++i)
+            if (this->groups_[i].title->y() <= scrollY + 24)
+                current = i;
+        this->sectionPicker_->setCurrentIndex(current);
+    }
     if (this->navigationLayout_ == nullptr)
     {
         return;
@@ -353,7 +369,7 @@ void GeneralPageView::updateNavigationHighlighting()
                       &group == &this->groups_.back()))
         {
             first = false;
-            group.navigationLink->setStyleSheet("color: #00ABF4");
+            group.navigationLink->setStyleSheet("color: #d6d6d6");
         }
         else
         {

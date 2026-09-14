@@ -3,7 +3,6 @@
 // SPDX-License-Identifier: MIT
 
 #include "common/Args.hpp"
-#include "common/Modes.hpp"
 #include "singletons/Resources.hpp"
 #include "singletons/Settings.hpp"
 
@@ -27,7 +26,7 @@ int main(int argc, char **argv)
     // Ensure settings are initialized before any benchmarks are run
     QTemporaryDir settingsDir;
     settingsDir.setAutoRemove(false);  // we'll remove it manually
-    chatterino::Settings settings(Modes(args), args, settingsDir.path());
+    chatterino::Settings settings(args, settingsDir.path());
 
     QTimer::singleShot(0, [&]() {
         ::benchmark::RunSpecifiedBenchmarks();

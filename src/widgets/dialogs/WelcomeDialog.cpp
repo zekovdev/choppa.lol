@@ -7,9 +7,10 @@
 namespace chatterino {
 
 WelcomeDialog::WelcomeDialog()
-    : BaseWindow({BaseWindow::EnableCustomFrame, BaseWindow::DisableLayoutSave})
+    : BaseWindow({BaseWindow::EnableCustomFrame, BaseWindow::ContentChrome,
+                  BaseWindow::DisableLayoutSave})
 {
-    this->setWindowTitle("Chatterino quick setup");
+    this->setWindowTitle("Zekerino quick setup");
 }
 
 }  // namespace chatterino

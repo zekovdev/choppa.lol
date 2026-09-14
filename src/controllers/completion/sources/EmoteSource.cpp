@@ -99,6 +99,7 @@ void EmoteSource::initializeFromChannel(const Channel *channel)
     auto *app = getApp();
 
     std::vector<EmoteItem> emotes;
+    emotes.reserve(2048);
     const auto *tc = dynamic_cast<const TwitchChannel *>(channel);
     // returns true also for special Twitch channels (/live, /mentions, /whispers, etc.)
     if (channel->isTwitchChannel())

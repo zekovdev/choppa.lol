@@ -35,7 +35,7 @@ public:
 
     MOCK_METHOD(
         void, getChannelFollowers,
-        (QString broadcasterID, QString userID,
+        (QString broadcasterID,
          ResultCallback<HelixGetChannelFollowersResponse> successCallback,
          std::function<void(QString)> failureCallback),
         (override));
@@ -368,8 +368,7 @@ public:
     MOCK_METHOD(
         void, getChatters,
         (QString broadcasterID, QString moderatorID, size_t maxChattersToFetch,
-         const QObject *caller,
-         const ResultCallback<HelixChatters> &successCallback,
+         ResultCallback<HelixChatters> successCallback,
          (FailureCallback<HelixGetChattersError, QString> failureCallback)),
         (override));  // getChatters
 
@@ -378,7 +377,7 @@ public:
     // contains a comma
     MOCK_METHOD(
         void, getChannelVIPs,
-        (const QString &broadcasterID, const QObject *caller,
+        (QString broadcasterID,
          ResultCallback<std::vector<HelixVip>> successCallback,
          (FailureCallback<HelixListVIPsError, QString> failureCallback)),
         (override));  // /vips
@@ -398,8 +397,7 @@ public:
     // contains a comma
     MOCK_METHOD(
         void, getModerators,
-        (const QString &broadcasterID, int maxModeratorsToFetch,
-         const QObject *caller,
+        (QString broadcasterID, int maxModeratorsToFetch,
          ResultCallback<std::vector<HelixModerator>> successCallback,
          (FailureCallback<HelixGetModeratorsError, QString> failureCallback)),
         (override));  // /mods
@@ -535,19 +533,6 @@ public:
          const QString &messageID, ResultCallback<> successCallback,
          (FailureCallback<HelixUnpinMessageError, QString>)failureCallback),
         (override));
-
-    MOCK_METHOD(void, getSharedChatSession,
-                (QString broadcasterID,
-                 ResultCallback<HelixSharedChatSession> successCallback,
-                 (FailureCallback<HelixGetSharedChatSessionError, QString>
-                      failureCallback)),
-                (override));
-
-    MOCK_METHOD(void, getModeratedChannels,
-                (QString userID, ResultCallback<QSet<QString>> successCallback,
-                 (FailureCallback<QString> failureCallback),
-                 CancellationToken &&token),
-                (override));
 
     MOCK_METHOD(void, update, (QString clientId, QString oauthToken),
                 (override));

@@ -48,6 +48,17 @@ Q_SIGNALS:
 private:
     void paintEvent(QPaintEvent *) override;
     void mousePressEvent(QMouseEvent *event) override;
+    void keyPressEvent(QKeyEvent *event) override
+    {
+        if (event->key() == Qt::Key_Space || event->key() == Qt::Key_Return)
+        {
+            QMouseEvent click(QEvent::MouseButtonPress, QPointF(), QPointF(),
+                              Qt::LeftButton, Qt::LeftButton, Qt::NoModifier);
+            this->mousePressEvent(&click);
+        }
+        else
+            BaseWidget::keyPressEvent(event);
+    }
 
     struct {
         QString labelText;
