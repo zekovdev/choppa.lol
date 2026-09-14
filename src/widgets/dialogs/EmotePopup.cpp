@@ -37,7 +37,6 @@
 #include <QHBoxLayout>
 #include <QLabel>
 #include <QPushButton>
-#include <QPainter>
 #include <QRegularExpression>
 #include <QStringBuilder>
 #include <QTabWidget>
@@ -249,20 +248,23 @@ std::vector<EmotePtr> filterEmoteVec(const QString &text,
 namespace chatterino {
 
 EmotePopup::EmotePopup(QWidget *parent)
-    : BasePopup({BaseWindow::Frameless, BaseWindow::DisableLayoutSave},
+    : BasePopup({BaseWindow::EnableCustomFrame, BaseWindow::ContentChrome,
+                 BaseWindow::DisableLayoutSave},
                 parent)
     , search_(new QLineEdit())
     , notebook_(new Notebook(this))
 {
-    this->anchor_ = parent;
-    if (parent)
+    // this->setStayInScreenRect(true);
+    auto bounds = getApp()->getWindows()->emotePopupBounds();
+    if (bounds.size().isEmpty())
     {
-        this->setParent(parent->window(), Qt::Widget);
-        parent->window()->installEventFilter(this);
-        connect(parent, &QObject::destroyed, this, &QWidget::close);
+        bounds.setSize(QSize{420, 390} * this->scale());
+        if (parent)
+            bounds.moveBottomRight(
+                parent->mapToGlobal(parent->rect().topRight()) - QPoint(0, 8));
     }
-    this->setMinimumSize(0, 0);
-    this->resize(420, 390);
+    this->setInitialBounds(bounds, widgets::BoundsChecking::DesiredPosition);
+    this->setMinimumSize(340, 280);
     this->setObjectName("choppaEmotePicker");
     this->setStyleSheet(R"(
         #choppaEmotePicker { background: #111111; }
@@ -292,13 +294,7 @@ EmotePopup::EmotePopup(QWidget *parent)
     this->search_->findChild<QAbstractButton *>()->setIcon(
         QPixmap(":/buttons/clearSearch.png"));
     this->search_->installEventFilter(this);
-    layout2->addWidget(this->search_, 1);
-    auto *close = new QPushButton(QString::fromUtf8("\xc3\x97"));
-    close->setAccessibleName(tr("Close emote picker"));
-    close->setToolTip(tr("Close"));
-    close->setFixedSize(28, 28);
-    connect(close, &QPushButton::clicked, this, &QWidget::close);
-    layout2->addWidget(close);
+    layout2->addWidget(this->search_);
 
     layout->addLayout(layout2);
 
@@ -612,8 +608,6 @@ void EmotePopup::reloadEmotes()
 
 bool EmotePopup::eventFilter(QObject *object, QEvent *event)
 {
-    if (object == this->parentWidget() && event->type() == QEvent::Resize)
-        this->positionInHost();
     if (object == this->search_ && event->type() == QEvent::KeyPress)
     {
         auto *keyEvent = dynamic_cast<QKeyEvent *>(event);
@@ -790,32 +784,9 @@ void EmotePopup::filterEmotes(const QString &searchText)
     this->searchView_->show();
 }
 
-void EmotePopup::paintEvent(QPaintEvent *)
-{
-    QPainter painter(this);
-    painter.setRenderHint(QPainter::Antialiasing);
-    painter.setPen(QColor("#383838"));
-    painter.setBrush(QColor("#111111"));
-    painter.drawRoundedRect(QRectF(rect()).adjusted(0.5, 0.5, -0.5, -0.5), 7, 7);
-}
-
-void EmotePopup::positionInHost()
-{
-    if (!this->parentWidget() || !this->anchor_)
-        return;
-    const QRect area = this->parentWidget()->rect().adjusted(8, 36, -8, -8);
-    const QSize size = QSize(420, 390).boundedTo(area.size());
-    const QPoint anchor = this->anchor_->mapTo(this->parentWidget(), QPoint(0, 0));
-    const int x = qBound(area.left(), anchor.x() + this->anchor_->width() - size.width(),
-                         qMax(area.left(), area.right() - size.width() + 1));
-    const int y = qBound(area.top(), anchor.y() - size.height() - 8,
-                         qMax(area.top(), area.bottom() - size.height() + 1));
-    this->setGeometry(QRect(QPoint(x, y), size));
-}
-
 void EmotePopup::saveBounds() const
 {
-    if (!this->isWindow() || isAppAboutToQuit())
+    if (isAppAboutToQuit())
     {
         return;
     }

@@ -640,32 +640,26 @@ TEST(ChoppaNavigation, UserCardPersistsAndWindowControlsWork)
     EXPECT_TRUE(card.isNull());
 }
 
-TEST(ChoppaNavigation, EmotePanelStaysInsideHost)
+TEST(ChoppaNavigation, EmoteWindowClosesAndReopens)
 {
     MockApplication app;
-    {
     QWidget host;
     host.resize(780, 510);
-    QWidget anchor(&host);
-    anchor.setGeometry(10, 460, 760, 40);
-    EmotePopup panel(&anchor);
     host.show();
-    panel.positionInHost();
-    panel.show();
-    QApplication::processEvents();
-    EXPECT_FALSE(panel.isWindow());
-    EXPECT_TRUE(host.rect().contains(panel.geometry()));
-    EXPECT_TRUE(panel.findChildren<QWidget *>("choppaTitlebar").isEmpty());
-    host.resize(500, 380);
-    QApplication::processEvents();
-    EXPECT_TRUE(host.rect().contains(panel.geometry()));
-    const auto capture = qEnvironmentVariable("CHOPPA_MEDIA_DIRECTORY");
-    if (!capture.isEmpty()) EXPECT_TRUE(host.grab().save(capture + "/emote-panel-check.png"));
-    }
-    for (int i = 0; i < 32; ++i)
+    for (int attempt = 0; attempt < 2; ++attempt)
     {
+        QPointer<EmotePopup> popup = new EmotePopup(&host);
+        popup->setAttribute(Qt::WA_DeleteOnClose);
+        popup->show();
         QApplication::processEvents();
+        EXPECT_TRUE(popup->isWindow());
+        QAbstractButton *close = nullptr;
+        for (auto *button : popup->findChildren<QAbstractButton *>())
+            if (button->accessibleName() == "Close") close = button;
+        ASSERT_NE(close, nullptr);
+        close->click();
         QApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
+        EXPECT_TRUE(popup.isNull());
     }
 }
 

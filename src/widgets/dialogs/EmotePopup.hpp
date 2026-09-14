@@ -8,7 +8,6 @@
 
 #include <pajlada/signals/signal.hpp>
 #include <QLineEdit>
-#include <QPointer>
 
 namespace chatterino {
 
@@ -26,20 +25,17 @@ public:
     EmotePopup(QWidget *parent = nullptr);
 
     void loadChannel(ChannelPtr channel);
-    void positionInHost();
 
     void closeEvent(QCloseEvent *event) override;
 
     pajlada::Signals::Signal<Link> linkClicked;
 
 protected:
-    void paintEvent(QPaintEvent *event) override;
     void resizeEvent(QResizeEvent *event) override;
     void moveEvent(QMoveEvent *event) override;
     void themeChangedEvent() override;
 
 private:
-    QPointer<QWidget> anchor_;
     ChannelView *globalEmotesView_{};
     ChannelView *channelEmotesView_{};
     ChannelView *subEmotesView_{};

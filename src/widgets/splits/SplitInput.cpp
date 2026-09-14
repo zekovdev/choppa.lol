@@ -566,7 +566,6 @@ void SplitInput::openEmotePopup()
     }
 
     this->emotePopup_->loadChannel(this->split_->getSelectedChannel());
-    this->emotePopup_->positionInHost();
     this->emotePopup_->show();
     this->emotePopup_->raise();
     this->emotePopup_->activateWindow();
