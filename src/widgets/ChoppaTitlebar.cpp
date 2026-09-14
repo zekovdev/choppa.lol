@@ -2,6 +2,7 @@
 #include "widgets/ChoppaTitlebar.hpp"
 
 #include <QHBoxLayout>
+#include <QFocusEvent>
 #include <QLabel>
 #include <QMouseEvent>
 #include <QPainter>
@@ -21,17 +22,39 @@ public:
     }
 
 protected:
+    void focusInEvent(QFocusEvent *event) override
+    {
+        keyboardFocus_ = event->reason() == Qt::TabFocusReason ||
+                         event->reason() == Qt::BacktabFocusReason ||
+                         event->reason() == Qt::ShortcutFocusReason;
+        QAbstractButton::focusInEvent(event);
+        update();
+    }
+
+    void focusOutEvent(QFocusEvent *event) override
+    {
+        keyboardFocus_ = false;
+        QAbstractButton::focusOutEvent(event);
+        update();
+    }
+
     void paintEvent(QPaintEvent *) override
     {
         QPainter p(this);
         p.setRenderHint(QPainter::Antialiasing);
         p.setPen(Qt::NoPen);
-        p.setBrush(underMouse() || isDown() || hasFocus()
+        p.setBrush(underMouse() || isDown()
                        ? QColor(action_ == 2
                                     ? (isDown() ? "#922334" : "#b32d3b")
                                     : "#242424")
                        : QColor("#0a0a0a"));
         p.drawRoundedRect(QRectF(rect()).adjusted(0.5, 0.5, -0.5, -0.5), 5, 5);
+        if (hasFocus() && keyboardFocus_)
+        {
+            p.setBrush(Qt::NoBrush);
+            p.setPen(QColor("#777777"));
+            p.drawRoundedRect(QRectF(rect()).adjusted(1.5, 1.5, -1.5, -1.5), 4, 4);
+        }
         p.setPen(QPen(QColor("#eeeeee"), 1.25));
         const QPointF c(width() / 2.0, height() / 2.0);
         if (action_ == 0)
@@ -47,6 +70,7 @@ protected:
 
 private:
     int action_;
+    bool keyboardFocus_ = false;
 };
 }  // namespace
 

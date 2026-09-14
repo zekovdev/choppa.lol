@@ -41,6 +41,8 @@
 #include <QAbstractButton>
 #include <QDebug>
 #include <QImage>
+#include <QStyleOptionButton>
+#include <QPainter>
 #include <QTimer>
 #include <QScrollArea>
 #include <QScrollBar>
@@ -628,6 +630,35 @@ TEST(ChoppaNavigation, UserCardPersistsAndWindowControlsWork)
     ASSERT_NE(minimize, nullptr);
     ASSERT_NE(maximize, nullptr);
     ASSERT_NE(close, nullptr);
+    minimize->setAttribute(Qt::WA_UnderMouse, false);
+    minimize->clearFocus();
+    const auto unfocused = minimize->grab().toImage();
+    minimize->setFocus(Qt::ActiveWindowFocusReason);
+    EXPECT_EQ(unfocused, minimize->grab().toImage());
+    auto *ban = card->findChild<QPushButton *>("ban");
+    auto *unban = card->findChild<QPushButton *>("unban");
+    ASSERT_NE(ban, nullptr);
+    ASSERT_NE(unban, nullptr);
+    for (auto *button : {ban, unban})
+    {
+        auto render = [button](bool hover) {
+            QImage image(button->size(), QImage::Format_ARGB32_Premultiplied);
+            image.fill(Qt::transparent);
+            QPainter painter(&image);
+            QStyleOptionButton option;
+            option.initFrom(button);
+            option.text = button->text();
+            option.state.setFlag(QStyle::State_MouseOver, hover);
+            button->style()->drawControl(QStyle::CE_PushButton, &option, &painter, button);
+            return image;
+        };
+        EXPECT_NE(render(false), render(true));
+        EXPECT_FALSE(button->autoDefault());
+    }
+    unban->clearFocus();
+    const auto baseColor = unban->grab().toImage().pixelColor(5, 5);
+    unban->setFocus(Qt::OtherFocusReason);
+    EXPECT_EQ(baseColor, unban->grab().toImage().pixelColor(5, 5));
     maximize->click();
     EXPECT_TRUE(card->isMaximized());
     maximize->click();

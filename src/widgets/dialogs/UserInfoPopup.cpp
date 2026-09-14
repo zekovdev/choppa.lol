@@ -190,9 +190,17 @@ UserInfoPopup::UserInfoPopup(bool /*closeAutomatically*/, Split *split)
     this->setObjectName("choppaUserCard");
     this->setStyleSheet(R"(
         #choppaUserCard { background: #111111; color: #eeeeee; }
-        #choppaUserCard QPushButton { background: #202020; color: #dddddd; border: none; border-radius: 6px; padding: 7px 9px; font: 12px 'Outfit'; text-align: center; }
-        #choppaUserCard QPushButton:hover, #choppaUserCard QPushButton:focus { background: #353535; color: white; }
+        #choppaUserCard QPushButton { widget-animation-duration: 0; background: #202020; color: #dddddd; border: 1px solid transparent; border-radius: 6px; padding: 7px 9px; font: 12px 'Outfit'; text-align: center; }
+        #choppaUserCard QPushButton:hover { background: #353535; color: white; }
+        #choppaUserCard QPushButton:focus { border-color: #777777; }
+        #choppaUserCard QPushButton:pressed { background: #161616; }
+        #choppaUserCard QPushButton#unban { background: #202020; color: #dddddd; }
+        #choppaUserCard QPushButton#unban:hover { background: #404040; color: #ffffff; }
+        #choppaUserCard QPushButton#unban:pressed { background: #161616; }
         #choppaUserCard QPushButton#ban { color: #ff8391; background: #341b20; }
+        #choppaUserCard QPushButton#ban:hover { color: #ffffff; background: #71313e; }
+        #choppaUserCard QPushButton#ban:pressed { background: #48202a; }
+        #choppaUserCard QPushButton:disabled { color: #777777; background: #191919; }
         #choppaUserCard QCheckBox { border: none; padding: 6px; color: #bbbbbb; }
         #choppaUserCard QCheckBox::indicator { width: 14px; height: 14px; border: 1px solid #555555; border-radius: 4px; background: #202020; }
         #choppaUserCard QCheckBox::indicator:checked { background: #dddddd; border-color: #dddddd; }
@@ -1753,6 +1761,9 @@ UserInfoPopup::TimeoutWidget::TimeoutWidget()
     {
         auto *button = new QPushButton(text);
         button->setObjectName(action == Ban ? "ban" : "unban");
+        button->setAutoDefault(false);
+        button->setDefault(false);
+        button->setCursor(Qt::PointingHandCursor);
         actions->addWidget(button);
         connect(button, &QPushButton::clicked, this, [this, action] {
             this->buttonClicked.invoke(std::make_pair(action, -1));
