@@ -159,7 +159,7 @@ ChatterListWidget::ChatterListWidget(const TwitchChannel *twitchChannel,
 
     this->setAttribute(Qt::WA_DeleteOnClose);
 
-    auto *dockVbox = new QVBoxLayout();
+    auto *dockVbox = new QVBoxLayout(this->getLayoutContainer());
     dockVbox->setContentsMargins(12, 12, 12, 12);
     dockVbox->setSpacing(10);
     auto *searchBar = new QLineEdit(this);
@@ -169,6 +169,13 @@ ChatterListWidget::ChatterListWidget(const TwitchChannel *twitchChannel,
 
     auto *loadingLabel = new QLabel("Loading...");
     searchBar->setPlaceholderText("Search User...");
+    dockVbox->addWidget(searchBar);
+    dockVbox->addWidget(loadingLabel);
+    dockVbox->addWidget(chattersList, 1);
+    dockVbox->addWidget(resultList, 1);
+    resultList->hide();
+    chattersList->setWordWrap(true);
+    resultList->setWordWrap(true);
 
     auto formatListItemText = [](const QString &text) {
         auto *item = new QListWidgetItem();
@@ -412,11 +419,6 @@ ChatterListWidget::ChatterListWidget(const TwitchChannel *twitchChannel,
     getApp()->getHotkeys()->shortcutsForCategory(HotkeyCategory::PopupWindow,
                                                  actions, this);
 
-    dockVbox->addWidget(searchBar);
-    dockVbox->addWidget(loadingLabel);
-    dockVbox->addWidget(chattersList);
-    dockVbox->addWidget(resultList);
-    resultList->hide();
 
     this->setStyleSheet(R"(
         QLabel { color: #999999; background: transparent; }
@@ -430,7 +432,6 @@ ChatterListWidget::ChatterListWidget(const TwitchChannel *twitchChannel,
         QScrollBar::handle:vertical { background: #383838; min-height: 24px; border-radius: 3px; }
         QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical { height: 0px; }
     )");
-    this->setLayout(dockVbox);
 }
 
 }  // namespace chatterino
