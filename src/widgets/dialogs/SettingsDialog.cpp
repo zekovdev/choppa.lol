@@ -27,11 +27,11 @@
 #include "widgets/settingspages/NotificationPage.hpp"
 #include "widgets/settingspages/PluginsPage.hpp"
 
+#include <QCloseEvent>
 #include <QDialogButtonBox>
+#include <QFile>
+#include <QLabel>
 #include <QLineEdit>
-#include <QPointer>
-
-using namespace Qt::Literals;
 
 namespace chatterino {
 
@@ -39,24 +39,35 @@ SettingsDialog::SettingsDialog(QWidget *parent)
     : BaseWindow(
           {
               BaseWindow::Flags::DisableCustomScaling,
+              BaseWindow::EnableCustomFrame,
+              BaseWindow::ContentChrome,
               BaseWindow::Flags::Dialog,
               BaseWindow::DisableLayoutSave,
               BaseWindow::BoundsCheckOnShow,
-              BaseWindow::UseSettingsStylesheet,
           },
           parent)
 {
     this->setObjectName("SettingsDialog");
-    this->setWindowTitle("Chatterino Settings");
-    this->setWindowRole(u"chatterino.settings"_s);
+    this->setWindowTitle("Settings");
     // Disable the ? button in the titlebar until we decide to use it
     this->setWindowFlags(this->windowFlags() &
                          ~Qt::WindowContextHelpButtonHint);
 
-    this->resize(915, 600);
+    this->resize(860, 640);
+    this->setMinimumSize(720, 480);
+    this->themeChangedEvent();
+    QFile styleFile(":/qss/settings.qss");
+    if (!styleFile.open(QFile::ReadOnly))
+    {
+        assert(false && "Resources not loaded");
+        qCWarning(chatterinoWidget) << "Resources not loaded";
+    }
+    QString stylesheet = QString::fromUtf8(styleFile.readAll());
+    this->setStyleSheet(stylesheet);
 
     this->initUi();
     this->addTabs();
+    this->overrideBackgroundColor_ = QColor("#111111");
 
     this->addShortcuts();
     this->signalHolder_.managedConnect(getApp()->getHotkeys()->onItemsUpdated,
@@ -102,6 +113,8 @@ void SettingsDialog::setSearchPlaceholderText()
 
 void SettingsDialog::initUi()
 {
+    this->getLayoutContainer()->setObjectName("settingsSurface");
+    this->getLayoutContainer()->setAttribute(Qt::WA_StyledBackground, true);
     auto outerBox = LayoutCreator<QWidget>(this->getLayoutContainer())
                         .setLayoutType<QVBoxLayout>()
                         .withoutSpacing();
@@ -122,33 +135,33 @@ void SettingsDialog::initUi()
     QObject::connect(edit.getElement(), &QLineEdit::textChanged, this,
                      &SettingsDialog::filterElements);
 
-    // CENTER
-    auto centerBox =
-        outerBox.emplace<QHBoxLayout>().withoutMargin().withoutSpacing();
-
-    // left side (tabs)
-    centerBox.emplace<QWidget>()
+    // Compact category grid keeps the full width available to settings.
+    outerBox.emplace<QWidget>()
         .assign(&this->ui_.tabContainerContainer)
-        .setLayoutType<QVBoxLayout>()
+        .setLayoutType<QGridLayout>()
         .withoutMargin()
         .assign(&this->ui_.tabContainer);
-    this->ui_.tabContainerContainer->setFixedWidth(
-        static_cast<int>(150 * this->dpi_));
-
-    // right side (pages)
-    centerBox.emplace<QStackedLayout>()
+    this->ui_.pageTitle = new QLabel;
+    this->ui_.pageTitle->setObjectName("settingsPageTitle");
+    outerBox->addWidget(this->ui_.pageTitle);
+    outerBox.emplace<QStackedLayout>()
         .assign(&this->ui_.pageStack)
         .withoutMargin();
+    this->ui_.emptySearch =
+        new QLabel(tr("No matching settings. Try another search."));
+    this->ui_.emptySearch->setAlignment(Qt::AlignCenter);
+    this->ui_.pageStack->addWidget(this->ui_.emptySearch);
+    outerBox->setStretch(3, 1);
 
     this->ui_.pageStack->setContentsMargins(0, 0, 0, 0);
 
-    outerBox->addSpacing(12);
+    outerBox->addSpacing(8);
 
     // BOTTOM
     auto buttons = outerBox.emplace<QDialogButtonBox>(Qt::Horizontal);
     {
         this->ui_.okButton =
-            buttons->addButton("Ok", QDialogButtonBox::YesRole);
+            buttons->addButton("Save changes", QDialogButtonBox::YesRole);
         this->ui_.cancelButton =
             buttons->addButton("Cancel", QDialogButtonBox::NoRole);
     }
@@ -174,36 +187,21 @@ void SettingsDialog::filterElements(const QString &text)
     }
 
     // find next visible page
-    if (this->lastSelectedByUser_ && this->lastSelectedByUser_->isVisible())
+    if (this->lastSelectedByUser_ && !this->lastSelectedByUser_->isHidden())
     {
         this->selectTab(this->lastSelectedByUser_, false);
     }
-    else if (!this->selectedTab_->isVisible())
+    else if (!this->selectedTab_ || this->selectedTab_->isHidden())
     {
+        this->ui_.pageStack->setCurrentWidget(this->ui_.emptySearch);
+        this->ui_.pageTitle->setText(tr("Search results"));
         for (auto &&tab : this->tabs_)
         {
-            if (tab->isVisible())
+            if (!tab->isHidden())
             {
                 this->selectTab(tab, false);
                 break;
             }
-        }
-    }
-
-    // remove duplicate spaces
-    bool shouldShowSpace = false;
-
-    for (int i = 0; i < this->ui_.tabContainer->count(); i++)
-    {
-        auto *item = this->ui_.tabContainer->itemAt(i);
-        if (auto *x = dynamic_cast<QSpacerItem *>(item); x)
-        {
-            x->changeSize(10, shouldShowSpace ? 16 : 0);
-            shouldShowSpace = false;
-        }
-        else if (item->widget())
-        {
-            shouldShowSpace |= item->widget()->isVisible();
         }
     }
 }
@@ -230,22 +228,21 @@ bool SettingsDialog::eventFilter(QObject *object, QEvent *event)
 
 void SettingsDialog::addTabs()
 {
-    this->ui_.tabContainer->setSpacing(0);
-    this->ui_.tabContainer->setContentsMargins(0, 20, 0, 20);
+    this->ui_.tabContainer->setSpacing(4);
+    this->ui_.tabContainer->setContentsMargins(0, 0, 0, 8);
+    for (int column = 0; column < 7; ++column)
+        this->ui_.tabContainer->setColumnStretch(column, 1);
 
     // Constructors are wrapped in std::function to remove some strain from first time loading.
 
     // clang-format off
     this->addTab([]{return new GeneralPage;},          "General",        ":/settings/about.svg", SettingsTabId::General);
-    this->ui_.tabContainer->addSpacing(16);
     this->addTab([]{return new AccountsPage;},         "Accounts",       ":/settings/accounts.svg", SettingsTabId::Accounts);
     this->addTab([]{return new NicknamesPage;},        "Nicknames",      ":/settings/accounts.svg");
-    this->ui_.tabContainer->addSpacing(16);
     this->addTab([]{return new CommandPage;},          "Commands",       ":/settings/commands.svg");
     this->addTab([]{return new HighlightingPage;},     "Highlights",     ":/settings/notifications.svg", SettingsTabId::Highlights);
     this->addTab([]{return new IgnoresPage;},          "Ignores",        ":/settings/ignore.svg");
     this->addTab([]{return new FiltersPage;},          "Filters",        ":/settings/filters.svg");
-    this->ui_.tabContainer->addSpacing(16);
     this->addTab([]{return new KeyboardSettingsPage;}, "Hotkeys",        ":/settings/keybinds.svg");
     this->addTab([]{return new ModerationPage;},       "Moderation",     ":/settings/moderation.svg", SettingsTabId::Moderation);
     this->addTab([]{return new NotificationPage;},     "Live Notifications",  ":/settings/notification2.svg");
@@ -253,7 +250,6 @@ void SettingsDialog::addTabs()
 #ifdef CHATTERINO_HAVE_PLUGINS
     this->addTab([]{return new PluginsPage;},          "Plugins",        ":/settings/plugins.svg");
 #endif
-    this->ui_.tabContainer->addStretch(1);
     this->addTab([]{return new AboutPage;},            "About",          ":/settings/about.svg", SettingsTabId::About, Qt::AlignBottom);
     // clang-format on
 }
@@ -266,7 +262,9 @@ void SettingsDialog::addTab(std::function<SettingsPage *()> page,
         new SettingsDialogTab(this, std::move(page), name, iconPath, id);
     tab->setFixedHeight(static_cast<int>(30 * this->dpi_));
 
-    this->ui_.tabContainer->addWidget(tab, 0, alignment);
+    (void)alignment;
+    const int index = static_cast<int>(this->tabs_.size());
+    this->ui_.tabContainer->addWidget(tab, index / 7, index % 7);
     this->tabs_.push_back(tab);
 
     if (this->tabs_.size() == 1)
@@ -291,17 +289,17 @@ void SettingsDialog::selectTab(SettingsDialogTab *tab, bool byUser)
     }();
 
     this->ui_.pageStack->setCurrentWidget(tab->page());
+    this->ui_.pageTitle->setText(tab->name());
 
     if (this->selectedTab_ != nullptr)
     {
         this->selectedTab_->setSelected(false);
-        this->selectedTab_->setStyleSheet("color: #FFF");
+        this->selectedTab_->setStyleSheet("color: #999999");
     }
 
     tab->setSelected(true);
-    tab->setStyleSheet(
-        "background: #222; color: #4FC3F7;"  // Should this be same as accent color?
-        "/*border: 1px solid #555; border-right: none;*/");
+    tab->setStyleSheet("background: #111111; color: #ffffff;"
+                       "/*border: 1px solid #555; border-right: none;*/");
     this->selectedTab_ = tab;
     if (byUser)
     {
@@ -338,15 +336,13 @@ SettingsDialogTab *SettingsDialog::tab(SettingsTabId id)
 void SettingsDialog::showDialog(QWidget *parent,
                                 SettingsDialogPreference preferredTab)
 {
-    static QPointer<SettingsDialog> instance;
-    if (instance)
+    static SettingsDialog *instance = new SettingsDialog(parent);
+    static bool hasShownBefore = false;
+    if (hasShownBefore)
     {
         instance->refresh();
     }
-    else
-    {
-        instance = new SettingsDialog(parent);
-    }
+    hasShownBefore = true;
 
     // Resets the cancel button.
     getSettings()->saveSnapshot();
@@ -415,15 +411,20 @@ void SettingsDialog::scaleChangedEvent(float newScale)
     {
         tab->setFixedHeight(30);
     }
+}
 
-    if (this->ui_.tabContainerContainer)
-    {
-        this->ui_.tabContainerContainer->setFixedWidth(150);
-    }
+void SettingsDialog::themeChangedEvent()
+{
+    BaseWindow::themeChangedEvent();
+
+    QPalette palette;
+    palette.setColor(QPalette::Window, QColor("#111"));
+    this->setPalette(palette);
 }
 
 void SettingsDialog::showEvent(QShowEvent *e)
 {
+    this->saveOnClose_ = false;
     this->ui_.search->setText("");
     BaseWindow::showEvent(e);
 }
@@ -431,6 +432,7 @@ void SettingsDialog::showEvent(QShowEvent *e)
 ///// Widget creation helpers
 void SettingsDialog::onOkClicked()
 {
+    this->saveOnClose_ = true;
     if (!getApp()->getArgs().dontSaveSettings)
     {
         getApp()->getCommands()->save();
@@ -443,9 +445,22 @@ void SettingsDialog::onOkClicked()
 
 void SettingsDialog::onCancelClicked()
 {
-    getSettings()->restoreSnapshot();
-
     this->close();
+}
+
+void SettingsDialog::closeEvent(QCloseEvent *event)
+{
+    if (!this->saveOnClose_)
+        getSettings()->restoreSnapshot();
+    BaseWindow::closeEvent(event);
+}
+
+void SettingsDialog::keyPressEvent(QKeyEvent *event)
+{
+    if (event->key() == Qt::Key_Escape)
+        this->onCancelClicked();
+    else
+        BaseWindow::keyPressEvent(event);
 }
 
 }  // namespace chatterino

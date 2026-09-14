@@ -71,6 +71,9 @@ class LoginDialog : public QDialog
 public:
     LoginDialog(QWidget *parent);
 
+protected:
+    void paintEvent(QPaintEvent *event) override;
+
 private:
     struct {
         QVBoxLayout mainLayout;

@@ -1,101 +1,109 @@
-![chatterinoLogo](https://user-images.githubusercontent.com/41973452/272541622-52457e89-5f16-4c83-93e7-91866c25b606.png)
-Chatterino7 [![GitHub Actions Build (Windows, Ubuntu, MacOS)](https://github.com/seventv/chatterino7/actions/workflows/build.yml/badge.svg?branch=chatterino7)](https://github.com/SevenTV/chatterino7/actions?query=workflow%3ABuild+branch%3Achatterino7) [![Chocolatey Package](https://img.shields.io/chocolatey/v/chatterino7?include_prereleases)](https://chocolatey.org/packages/chatterino7)
-============
+<div align="center">
 
-Chatterino7 is a fork of Chatterino 2. This fork mainly contains features that aren't accepted into Chatterino 2, most notably 7TV subscriber features.
+<img src="docs/media/cover.svg" alt="choppa.lol Twitch and Kick chat client" width="100%" />
 
-### Features of Chatterino7
+**Twitch and Kick desktop chat built with C++ and Qt.**
 
-- 7TV Name Paints
+[Preview](#a-look-inside) | [Features](#features) | [Build](#build-it) | [Developer](#behind-the-project)
 
-- 7TV Personal Emotes
+![C++23](https://img.shields.io/badge/C%2B%2B-23-161616?style=flat-square)
+![Qt 6](https://img.shields.io/badge/Qt-6-161616?style=flat-square)
+![Windows](https://img.shields.io/badge/tested_build-Windows_x64-161616?style=flat-square)
+![MIT](https://img.shields.io/badge/code_license-MIT-161616?style=flat-square)
 
-- 7TV Animated Profile Avatars
+</div>
 
-- 4x Images (7TV and FFZ)
+## About choppa.lol
 
-### Screenshots
+**Zekerino is now choppa.lol.** The project has a new name and a redesigned interface. This repository contains the consolidated choppa.lol release.
 
-![Example of Personal Emotes](https://user-images.githubusercontent.com/27637025/227032811-837c56eb-7724-431b-b00e-b944c9289dff.png)
-![Example of Paints](https://user-images.githubusercontent.com/27637025/227034147-cb1fcd76-dbae-4878-9551-96ffa64dd1a9.png)
+choppa.lol is a Twitch and Kick chat client built on the Chatterino / Chatterino7 foundation. It keeps the chat engine, emote ecosystem and familiar power tools, then brings its own visual language and workflow to the desktop: restrained surfaces, compact navigation and more room for the conversation.
 
-### Downloads
+This is an independent hobby project, not an official Twitch, Kick or 7TV product. There is no commercial support promise.
 
-**Stable builds** can be downloaded from the [releases section](https://github.com/SevenTV/chatterino7/releases/latest).
+## A look inside
 
-To test new features, you can download the **nighly build** [here](https://github.com/SevenTV/chatterino7/releases/tag/nightly-build).
+[![choppa.lol feature preview](docs/media/choppa-preview.gif)](docs/media/choppa-preview.mp4)
 
-Windows users can install Chatterino7 [from Chocolatey](https://chocolatey.org/packages/chatterino7).
+**[Watch the short feature preview →](docs/media/choppa-preview.mp4)**
 
-### Issues
+Screenshots are rendered from the actual Qt interface using an offline demo. Names, messages and live indicators are fictional. The video is an edited interface preview, not a latency benchmark or a live stream recording.
 
-If you have issues such as crashes or weird behaviour regarding 7TV features, report them [in the issue-section](https://github.com/SevenTV/chatterino7/issues). If you have issues with other features, please report them [in the upstream issue-section](https://github.com/Chatterino/chatterino2/issues).
+<details>
+<summary><strong>Full-size screenshots, settings, account setup and workspace actions</strong></summary>
 
-### Discord
+![Compact chat layout](docs/media/chat.png)
+![Searchable sidebar layout](docs/media/sidebar.png)
+![Settings with category tabs and search](docs/media/settings.png)
 
-If you don't have a GitHub account and want to report issues or want to join the community you can join the official 7TV Discord using the link here: <https://discord.com/invite/7tv>.
+| Name menu moderation | Twitch timeout presets |
+| --- | --- |
+| ![Moderation actions](docs/media/moderation.png) | ![Timeout choices](docs/media/timeouts.png) |
 
-### AVIF Support
+These captures use the same moderation action builder as the chat name menu. No moderation commands are sent during capture. Actions in the app require channel permissions.
 
-When building Chatterino 7, you might not have access to a static build of `libavif`. In that case, you can define `CHATTERINO_NO_AVIF_PLUGIN` in CMake. If you have `qavif.so` from [kimageformats](https://invent.kde.org/frameworks/kimageformats) installed on your system, Chatterino will pick it up and use AVIF images.
+| Connect an account | Organize your chat |
+| --- | --- |
+| ![Account dialog](docs/media/account.png) | ![Workspace menu](docs/media/workspace-menu.png) |
 
-## Original Chatterino 2 Readme
+</details>
 
-Chatterino 2 is a chat client for [Twitch.tv](https://twitch.tv).
-The Chatterino 2 wiki can be found [here](https://wiki.chatterino.com).
-Contribution guidelines can be found [here](https://wiki.chatterino.com/Contributing%20for%20Developers).
+## What changes in this fork
 
-## Download
+The main differences are the Choppa interface, compact channel navigation, separate live and unread indicators, layout import and the reworked user-name moderation menu. The menu groups timeout presets, ban reasons, unban and Twitch suspicious-user actions in one place. Moderation itself also exists in other chat clients.
 
-Current releases are available at [https://chatterino.com](https://chatterino.com).
-Windows users can also install Chatterino [from Chocolatey](https://chocolatey.org/packages/chatterino).
+The preview shows chat tabs, the searchable sidebar, moderation actions, timeout choices, account setup, settings and tab actions. The table below also covers features that need live account data and are not demonstrated by the offline recording.
 
-## Nightly build
+## Features
 
-You can download the latest Chatterino 2 build over [here](https://github.com/Chatterino/chatterino2/releases/tag/nightly-build)
+These are the areas this project changes or extends beyond its upstream base. They are practical differences, not a claim to outperform every other client.
 
-You might also need to install the [VC++ Redistributables](https://aka.ms/vs/17/release/vc_redist.x64.exe) from Microsoft if you do not have it installed already.  
-If you still receive an error about `MSVCR120.dll missing`, then you should install the [VC++ 2013 Restributable](https://download.microsoft.com/download/2/E/6/2E61CFA4-993B-4DD4-91DA-3737CD5CD6E3/vcredist_x64.exe).
+| Area | What you get |
+| --- | --- |
+| **A different desktop feel** | Choppa branding, compact navigation, shared window controls and reworked account, settings, emote and user-card surfaces. |
+| **7TV personality** | Name paints, badges and styled highlights, including paint loading for messages already in the chat history. |
+| **Emotes where you type** | 7TV, BTTV and FFZ emote previews in the input, with an emote completion wheel. |
+| **Moderation within reach** | Name-menu shortcuts for bans, timeouts and reversals; Twitch monitoring/restriction actions; a per-message moderation slider. Channel permissions still apply. |
+| **Clearer navigation** | Red live indicators, separate unread/mention states, a searchable sidebar and full tab actions from either layout. |
+| **Bring your channels** | Import of supported Zekerino/Chatterino channel layouts. Account credentials are not imported. |
+| **Ready-to-select dictionaries** | Hunspell enabled in the Windows package with German and US-English dictionaries, including umlaut support. Spell checking is opt-in. |
 
-## Building
+Upstream tools remain part of the experience: tabs and splits, highlights, filters, hotkeys, logging and plugin APIs. Chatterino 2.5.5 also supplies lead-moderator support, Unicode 17 emoji data, the slowmode/timeout countdown, poll and prediction commands, Markdown notes, and more. Those features deserve their upstream credit.
 
-To get source code with required submodules run:
+See the [2.5.5 comparison](docs/CHOPPA-255-PARITY.md) and [implementation notes](docs/CHOPPA-DESKTOP.md) for specifics.
 
-```shell
-git clone --recurse-submodules https://github.com/Chatterino/chatterino2.git
-```
+## Getting started
 
-or
+Check [Releases](https://github.com/zekovdev/choppa.lol/releases) for a current choppa.lol Windows package. If no current release is listed, build from source below. An old Zekerino archive is not necessarily the current Choppa version.
 
-```shell
-git clone https://github.com/Chatterino/chatterino2.git
-cd chatterino2
-git submodule update --init --recursive
-```
+1. Extract the **entire** portable archive into a writable folder.
+2. Run `ChoppaChat.exe`; keep its DLLs and subfolders beside it.
+3. Connect your account in Settings → Accounts.
+4. Add a channel, or let supported existing channel layouts be imported.
 
-- [Building on Windows](../master/BUILDING_ON_WINDOWS.md)
-- [Building on Windows with vcpkg](../master/BUILDING_ON_WINDOWS_WITH_VCPKG.md)
-- [Building on Linux](../master/BUILDING_ON_LINUX.md)
-- [Building on macOS](../master/BUILDING_ON_MAC.md)
-- [Building on FreeBSD](../master/BUILDING_ON_FREEBSD.md)
+Enable the send-wait countdown in Settings → General if you want it. For spelling, open Settings → External tools, enable spell checking and select `de_DE` or `en_US` in the packaged Windows build.
 
-## Git blame
+Twitch controls what third-party clients may do. Polls and predictions need broadcaster permissions; some lead-moderator capabilities remain website-only. There is no channel-points farming feature.
 
-This project has big commits in the history which touch most files while only doing stylistic changes. To improve the output of git-blame, consider setting:
+## Build it
 
-```shell
-git config blame.ignoreRevsFile .git-blame-ignore-revs
-```
+**C++23, CMake and Qt 6.** The current package is built and tested on Windows x64 with Qt 6.8.3. Hunspell is enabled by default on Windows; an existing CMake cache may need `-DCHATTERINO_SPELLCHECK=ON`.
 
-This will ignore all revisions mentioned in the [`.git-blame-ignore-revs`
-file](./.git-blame-ignore-revs). GitHub does this by default.
+- [Windows](BUILDING_ON_WINDOWS.md) | [Windows with vcpkg](BUILDING_ON_WINDOWS_WITH_VCPKG.md)
+- [Linux](BUILDING_ON_LINUX.md) | [macOS](BUILDING_ON_MAC.md) | [FreeBSD](BUILDING_ON_FREEBSD.md)
 
-## Code style
+The non-Windows guides are inherited from upstream. The Choppa interface has not been fully validated on every platform. Preserve your settings before trying development builds. Upstream automatic updating is disabled in the custom portable package so it cannot replace this build with another client.
 
-The code is formatted using [clang-format](https://clang.llvm.org/docs/ClangFormat.html). Our configuration is found in the [.clang-format](.clang-format) file in the repository root directory.
+## Behind the project
 
-For more contribution guidelines, take a look at [the wiki](https://wiki.chatterino.com/Contributing%20for%20Developers/).
+I'm **[zekovdev](https://github.com/zekovdev)**, a reverse engineer and C++ developer who likes taking software apart, understanding how it works and putting it back together differently.
 
-## Doxygen
+I build choppa.lol in my spare time to try ideas, learn and make a chat client I enjoy using. My work here focuses on the interface, navigation and moderation tools. It is a personal hobby project.
 
-Doxygen is used to generate project information daily and is available [here](https://doxygen.chatterino.com).
+If something feels off, a clear bug report helps more than a vague promise that everything is perfect. [Open an issue](https://github.com/zekovdev/choppa.lol/issues) with the build, steps to reproduce and a screenshot without tokens or private account information.
+
+## Credit where it belongs
+
+choppa.lol continues Zekerino and builds on **Chatterino, Chatterino7 and their contributors**. It would not exist without that work. Thanks also to the 7TV, BetterTTV, FrankerFaceZ, Qt, Hunspell and dictionary communities.
+
+Project code is MIT-licensed; see [LICENSE](LICENSE). Third-party components, fonts and dictionaries retain their own licenses and attribution, included with the relevant source or packaged files.

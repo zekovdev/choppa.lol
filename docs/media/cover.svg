@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="360" viewBox="0 0 1280 360">
+<rect width="1280" height="360" rx="18" fill="#0a0a0a"/>
+<g font-family="Arial, Helvetica, sans-serif">
+<text x="52" y="190" fill="#f5f5f5" font-size="106" font-weight="700" letter-spacing="-5">choppa<tspan fill="#777777">.lol</tspan></text>
+<text x="58" y="247" fill="#bbbbbb" font-size="24">Twitch and Kick chat client</text>
+<text x="1222" y="318" fill="#888888" font-size="16" text-anchor="end">by zekovdev</text></g>
+</svg>

@@ -87,13 +87,8 @@ void addOrReplaceChannelTimeout(const Buf &buffer, MessagePtr message,
             if (!message->flags.has(MessageFlag::PubSub) &&
                 s->flags.has(MessageFlag::PubSub))
             {
-                shouldAddMessage = false;
-                break;
-            }
-
-            if (timeoutStackStyle == TimeoutStackStyle::DontStack)
-            {
-                // Break here rather than at the start so that deduplication can run first.
+                shouldAddMessage =
+                    timeoutStackStyle == TimeoutStackStyle::DontStack;
                 break;
             }
 

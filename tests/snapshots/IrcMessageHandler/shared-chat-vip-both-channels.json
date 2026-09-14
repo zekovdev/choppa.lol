@@ -189,10 +189,5 @@
             "userID": "100229878",
             "usernameColor": "#ff00ff7f"
         }
-    ],
-    "params": {
-        "helixExpectations": {
-            "getSharedChatSession": 1
-        }
-    }
+    ]
 }

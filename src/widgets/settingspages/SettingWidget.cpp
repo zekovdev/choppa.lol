@@ -11,9 +11,9 @@
 #include "util/RapidJsonSerializeQString.hpp"  // IWYU pragma: keep
 #include "widgets/dialogs/ColorPickerDialog.hpp"
 #include "widgets/helper/color/ColorButton.hpp"
-#include "widgets/helper/SvgWidget.hpp"
 #include "widgets/settingspages/CustomWidgets.hpp"
 #include "widgets/settingspages/GeneralPageView.hpp"
+#include "widgets/settingspages/ToggleSwitch.hpp"
 
 #include <QBoxLayout>
 #include <QCheckBox>
@@ -23,6 +23,7 @@
 #include <QLineEdit>
 #include <QPixmap>
 #include <QSvgRenderer>
+#include <QSvgWidget>
 #include <Qt>
 
 #include <algorithm>
@@ -40,7 +41,7 @@ const QRegularExpression MAX_TOOLTIP_LINE_LENGTH_REGEX(
 namespace chatterino {
 
 SettingWidget::SettingWidget(const QString &mainKeyword)
-    : tooltipIcon(new SvgWidget(this))
+    : tooltipIcon(new QSvgWidget(this))
     , vLayout(new QVBoxLayout(this))
     , hLayout(new QHBoxLayout)
 {
@@ -58,11 +59,14 @@ SettingWidget *SettingWidget::checkbox(const QString &label,
 {
     auto *widget = new SettingWidget(label);
 
-    auto *check = new SCheckBox(label);
+    auto *lbl = new SLabel(label);
+    lbl->setWordWrap(true);
+    auto *check = new ToggleSwitch();
 
-    widget->hLayout->addWidget(check);
+    widget->hLayout->addWidget(lbl, 1);
     widget->hLayout->addWidget(widget->tooltipIcon);
     widget->hLayout->addStretch(1);
+    widget->hLayout->addWidget(check);
 
     // update when setting changes
     setting.connect(
@@ -78,7 +82,7 @@ SettingWidget *SettingWidget::checkbox(const QString &label,
                      });
 
     widget->actionWidget = check;
-    widget->label = check;
+    widget->label = lbl;
 
     return widget;
 }
@@ -88,11 +92,14 @@ SettingWidget *SettingWidget::inverseCheckbox(const QString &label,
 {
     auto *widget = new SettingWidget(label);
 
-    auto *check = new SCheckBox(label);
+    auto *lbl = new SLabel(label);
+    lbl->setWordWrap(true);
+    auto *check = new ToggleSwitch();
 
-    widget->hLayout->addWidget(check);
+    widget->hLayout->addWidget(lbl, 1);
     widget->hLayout->addWidget(widget->tooltipIcon);
     widget->hLayout->addStretch(1);
+    widget->hLayout->addWidget(check);
 
     // update when setting changes
     setting.connect(
@@ -108,7 +115,7 @@ SettingWidget *SettingWidget::inverseCheckbox(const QString &label,
                      });
 
     widget->actionWidget = check;
-    widget->label = check;
+    widget->label = lbl;
 
     return widget;
 }
@@ -119,18 +126,21 @@ SettingWidget *SettingWidget::customCheckbox(
 {
     auto *widget = new SettingWidget(label);
 
-    auto *check = new SCheckBox(label);
+    auto *lbl = new SLabel(label);
+    lbl->setWordWrap(true);
+    auto *check = new ToggleSwitch();
 
-    widget->hLayout->addWidget(check);
+    widget->hLayout->addWidget(lbl, 1);
     widget->hLayout->addWidget(widget->tooltipIcon);
     widget->hLayout->addStretch(1);
+    widget->hLayout->addWidget(check);
 
     check->setChecked(initialValue);
 
     QObject::connect(check, &QCheckBox::toggled, widget, save);
 
     widget->actionWidget = check;
-    widget->label = check;
+    widget->label = lbl;
 
     return widget;
 }
@@ -202,7 +212,8 @@ SettingWidget *SettingWidget::dropdown(const QString &label,
     }
 
     // TODO: this can probably use some other size hint/size strategy
-    combo->setMinimumWidth(combo->minimumSizeHint().width() + 30);
+    combo->setSizeAdjustPolicy(QComboBox::AdjustToContents);
+    combo->setMinimumContentsLength(0);
 
     widget->actionWidget = combo;
     widget->label = lbl;
@@ -260,10 +271,6 @@ template SettingWidget *SettingWidget::dropdown<EmojiStyle>(
     const QString &label, EnumStringSetting<EmojiStyle> &setting);
 template SettingWidget *SettingWidget::dropdown<BrowserManifestFormat>(
     const QString &label, EnumStringSetting<BrowserManifestFormat> &setting);
-template SettingWidget *SettingWidget::dropdown<TwitchReadConnectionMode>(
-    const QString &label, EnumStringSetting<TwitchReadConnectionMode> &setting);
-template SettingWidget *SettingWidget::dropdown<KickConnectionPreference>(
-    const QString &label, EnumStringSetting<KickConnectionPreference> &setting);
 
 template <typename T>
 SettingWidget *SettingWidget::dropdown(const QString &label,
@@ -282,7 +289,8 @@ SettingWidget *SettingWidget::dropdown(const QString &label,
     }
 
     // TODO: this can probably use some other size hint/size strategy
-    combo->setMinimumWidth(combo->minimumSizeHint().width() + 30);
+    combo->setSizeAdjustPolicy(QComboBox::AdjustToContents);
+    combo->setMinimumContentsLength(0);
 
     widget->actionWidget = combo;
     widget->label = lbl;
@@ -361,7 +369,8 @@ SettingWidget *SettingWidget::dropdown(
     }
 
     // TODO: this can probably use some other size hint/size strategy
-    combo->setMinimumWidth(combo->minimumSizeHint().width() + 30);
+    combo->setSizeAdjustPolicy(QComboBox::AdjustToContents);
+    combo->setMinimumContentsLength(0);
 
     widget->actionWidget = combo;
     widget->label = lbl;
@@ -469,6 +478,7 @@ SettingWidget *SettingWidget::lineEdit(const QString &label,
 
     widget->hLayout->addWidget(lbl);
     widget->hLayout->addWidget(widget->tooltipIcon);
+    widget->hLayout->addStretch(1);
     widget->hLayout->addWidget(edit);
 
     // Update the setting when the widget changes.
@@ -642,7 +652,7 @@ void SettingWidget::addToLayout(QLayout *layout)
         return;
     }
 
-    assert(false && "unimplemented");
+    layout->addWidget(this);
 }
 
 void SettingWidget::registerWidget(GeneralPageView &view)

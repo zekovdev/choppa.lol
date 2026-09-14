@@ -4,36 +4,44 @@
 
 #include "widgets/splits/SplitInput.hpp"
 
+#include "common/Channel.hpp"
 #include "common/Literals.hpp"
 #include "controllers/accounts/AccountController.hpp"
 #include "controllers/commands/Command.hpp"
 #include "controllers/commands/CommandController.hpp"
-#include "controllers/completion/TabCompletionModel.hpp"
 #include "controllers/hotkeys/HotkeyController.hpp"
-#include "controllers/plugins/PluginController.hpp"
+#include "controllers/spellcheck/SpellChecker.hpp"
+#include "messages/MessageBuilder.hpp"
 #include "mocks/BaseApplication.hpp"
-#include "mocks/Channel.hpp"
 #include "mocks/EmoteController.hpp"
 #include "mocks/TwitchIrcServer.hpp"
-#include "providers/bttv/BttvEmotes.hpp"
-#include "providers/ffz/FfzEmotes.hpp"
-#include "providers/seventv/SeventvEmotes.hpp"
 #include "singletons/Fonts.hpp"
+#include "singletons/CrashHandler.hpp"
 #include "singletons/Paths.hpp"
 #include "singletons/Settings.hpp"
 #include "singletons/Theme.hpp"
 #include "singletons/WindowManager.hpp"
 #include "Test.hpp"
-#include "widgets/helper/ResizingTextEdit.hpp"
+#include "widgets/ChoppaTitlebar.hpp"
+#include "widgets/dialogs/LoginDialog.hpp"
+#include "widgets/dialogs/SettingsDialog.hpp"
+#include "widgets/helper/ChannelView.hpp"
+#include "widgets/helper/ChoppaModerationActions.hpp"
+#include "widgets/helper/NotebookTab.hpp"
 #include "widgets/Notebook.hpp"
+#include "widgets/settingspages/GeneralPageView.hpp"
 #include "widgets/splits/Split.hpp"
+#include "widgets/splits/SplitContainer.hpp"
+#include "widgets/Window.hpp"
 
-#include <QApplication>
-#include <QCompleter>
+#include <QAbstractButton>
 #include <QDebug>
+#include <QImage>
+#include <QScrollArea>
+#include <QScrollBar>
 #include <QString>
-
-#include <tuple>
+#include <QTabBar>
+#include <QVBoxLayout>
 
 using namespace chatterino;
 using ::testing::Exactly;
@@ -47,12 +55,18 @@ public:
         : windowManager(this->args_, this->paths_, this->settings, this->theme,
                         this->fonts)
         , commands(this->paths_)
+        , crashHandler(this->paths_)
     {
     }
 
     HotkeyController *getHotkeys() override
     {
         return &this->hotkeys;
+    }
+
+    ITwitchIrcServer *getTwitch() override
+    {
+        return &this->twitch;
     }
 
     WindowManager *getWindows() override
@@ -75,66 +89,18 @@ public:
         return &this->emotes;
     }
 
-    ITwitchIrcServer *getTwitch() override
+    CrashHandler *getCrashHandler() override
     {
-        return &this->twitch;
+        return &this->crashHandler;
     }
-
-    mock::MockTwitchIrcServer twitch;
-
-    BttvEmotes *getBttvEmotes() override
-    {
-        return &this->bttv;
-    }
-
-    FfzEmotes *getFfzEmotes() override
-    {
-        return &this->ffz;
-    }
-
-    SeventvEmotes *getSeventvEmotes() override
-    {
-        return &this->seventv;
-    }
-
-    BttvEmotes bttv;
-    FfzEmotes ffz;
-    SeventvEmotes seventv;
-
-#ifdef CHATTERINO_HAVE_PLUGINS
-    PluginController *getPlugins() override
-    {
-        return &this->plugins;
-    }
-
-    PluginController plugins{this->paths_};
-#endif
 
     HotkeyController hotkeys;
+    mock::MockTwitchIrcServer twitch;
     WindowManager windowManager;
     AccountController accounts;
     CommandController commands;
     mock::EmoteController emotes;
-};
-
-class TestSplitInput : public SplitInput
-{
-public:
-    using SplitInput::insertCompletionText;
-    using SplitInput::SplitInput;
-
-    void undoInput()
-    {
-        this->ui_.textEdit->undo();
-    }
-};
-
-class SplitInputCompletionTest : public ::testing::Test
-{
-public:
-    MockApplication mockApplication;
-    Split split{nullptr};
-    TestSplitInput input{&this->split};
+    CrashHandler crashHandler;
 };
 
 class SplitInputTest
@@ -154,50 +120,6 @@ public:
 
 }  // namespace
 
-TEST_F(SplitInputCompletionTest, EmoteCompletionPreservesUndoHistory)
-{
-    this->input.insertText("don't ping him :paja");
-    ASSERT_EQ("don't ping him :paja", this->input.getInputText());
-
-    this->input.insertCompletionText("pajaGIGA");
-    ASSERT_EQ("don't ping him pajaGIGA ", this->input.getInputText());
-
-    this->input.undoInput();
-    EXPECT_EQ("don't ping him :paja", this->input.getInputText());
-    this->input.undoInput();
-    EXPECT_TRUE(this->input.getInputText().isEmpty());
-}
-
-TEST_F(SplitInputCompletionTest, UsernameCompletionPreservesUndoHistory)
-{
-    this->input.insertText("boring game @fors");
-    ASSERT_EQ("boring game @fors", this->input.getInputText());
-
-    this->input.insertCompletionText("forsen");
-    ASSERT_EQ("boring game @forsen ", this->input.getInputText());
-
-    this->input.undoInput();
-    EXPECT_EQ("boring game @fors", this->input.getInputText());
-    this->input.undoInput();
-    EXPECT_TRUE(this->input.getInputText().isEmpty());
-}
-
-TEST_F(SplitInputCompletionTest, TabCompletionPreservesUndoHistory)
-{
-    ResizingTextEdit edit;
-    QCompleter completer;
-    edit.setCompleter(&completer);
-    edit.insertPlainText("UR DONE BA");
-
-    Q_EMIT completer.highlighted(QString("BAND "));
-    ASSERT_EQ("UR DONE BAND ", edit.toPlainText());
-
-    edit.undo();
-    EXPECT_EQ("UR DONE BA", edit.toPlainText());
-    edit.undo();
-    EXPECT_TRUE(edit.toPlainText().isEmpty());
-}
-
 TEST_P(SplitInputTest, Reply)
 {
     std::tuple<QString, QString> params = this->GetParam();
@@ -213,194 +135,6 @@ TEST_P(SplitInputTest, Reply)
     QString actual = this->input.getInputText();
     ASSERT_EQ(expected, actual) << "Input text after setReply should be '"
                                 << expected << "', but got '" << actual << "'";
-}
-
-TEST(SplitInput, ReplyCommandCompletion)
-{
-    MockApplication app;
-    app.commands.items.append(Command{"/slashreplycompletion", "test"});
-    app.commands.items.append(Command{".dotreplycompletion", "test"});
-    Split split(nullptr);
-    SplitInput input(&split);
-    auto *textEdit = input.findChild<QTextEdit *>();
-    // NOLINTNEXTLINE(clazy-unneeded-cast)
-    auto *edit = dynamic_cast<ResizingTextEdit *>(textEdit);
-    ASSERT_NE(edit, nullptr);
-    mock::MockChannel channel("forsen");
-    edit->setCompleter(new QCompleter(channel.completionModel, edit));
-
-    // Slash and dot commands can be completed in replies
-    for (const auto &trigger :
-         {QString("/slashreplycomp"), QString(".dotreplycomp")})
-    {
-        auto message = std::make_shared<Message>();
-        message->displayName = "forsen";
-        input.setInputText("");
-        input.setReply(message, {});
-        input.insertText(trigger);
-
-        // Commands are completed at the first word after the reply prefix `@username `
-        QKeyEvent tab(QEvent::KeyPress, Qt::Key_Tab, Qt::NoModifier);
-        QApplication::sendEvent(edit, &tab);
-        EXPECT_EQ(input.getInputText(), "@forsen " + trigger + "letion ");
-
-        // Commands are not completed later than the first word after the prefix
-        input.setInputText("@forsen test " + trigger);
-        edit->moveCursor(QTextCursor::End);
-        QApplication::sendEvent(edit, &tab);
-        EXPECT_EQ(input.getInputText(), "@forsen test " + trigger);
-
-        // Manually restoring an edited prefix does not restore reply completion
-        input.setInputText("@forsenX " + trigger);
-        input.setInputText("@forsen " + trigger);
-        edit->moveCursor(QTextCursor::End);
-        QApplication::sendEvent(edit, &tab);
-        EXPECT_EQ(input.getInputText(), "@forsen " + trigger);
-
-        // Normal command completion works after cancelling a reply
-        input.setReply(message, {});
-        input.setReply(nullptr, {});
-        input.setInputText(trigger);
-        edit->moveCursor(QTextCursor::End);
-        QApplication::sendEvent(edit, &tab);
-        EXPECT_EQ(input.getInputText(), trigger + "letion ");
-    }
-}
-
-TEST(SplitInput, EmptyReplyUsernameCompletion)
-{
-    MockApplication app;
-    app.settings.mentionUsersWithComma = true;
-    app.settings.alwaysIncludeBroadcasterInUserCompletions = true;
-    app.commands.items.append(Command{"/slashreplycompletion", "test"});
-    Split split(nullptr);
-    SplitInput input(&split);
-    auto *textEdit = input.findChild<QTextEdit *>();
-    // NOLINTNEXTLINE(clazy-unneeded-cast)
-    auto *edit = dynamic_cast<ResizingTextEdit *>(textEdit);
-    ASSERT_NE(edit, nullptr);
-    TwitchChannel channel("forsen");
-    edit->setCompleter(new QCompleter(channel.completionModel, edit));
-
-    auto message = std::make_shared<Message>();
-    message->displayName = "forsen";
-    input.setReply(message, {});
-
-    // Completing the username in an empty reply does not add a comma
-    QKeyEvent tab(QEvent::KeyPress, Qt::Key_Tab, Qt::NoModifier);
-    QApplication::sendEvent(edit, &tab);
-    EXPECT_EQ(input.getInputText(), "@forsen ");
-
-    // Reply completion still works after completing the prefix username
-    input.insertText("/slashreplycomp");
-    QApplication::sendEvent(edit, &tab);
-    EXPECT_EQ(input.getInputText(), "@forsen /slashreplycompletion ");
-}
-
-TEST(SplitInput, ReplyBodyUsernameCompletion)
-{
-    MockApplication app;
-    Split split(nullptr);
-    SplitInput input(&split);
-    auto *textEdit = input.findChild<QTextEdit *>();
-    // NOLINTNEXTLINE(clazy-unneeded-cast)
-    auto *edit = dynamic_cast<ResizingTextEdit *>(textEdit);
-    ASSERT_NE(edit, nullptr);
-    TwitchChannel channel("forsen");
-    channel.addRecentChatter("pajlada");
-    edit->setCompleter(new QCompleter(channel.completionModel, edit));
-
-    auto message = std::make_shared<Message>();
-    message->displayName = "forsen";
-    input.setReply(message, {});
-
-    for (bool mentionComma : {true, false})
-    {
-        app.settings.mentionUsersWithComma = mentionComma;
-
-        // The first username in the reply body respects the comma setting
-        input.setInputText("@forsen @paj");
-        edit->moveCursor(QTextCursor::End);
-        EXPECT_TRUE(input.isEditFirstWord());
-        QKeyEvent tab(QEvent::KeyPress, Qt::Key_Tab, Qt::NoModifier);
-        QApplication::sendEvent(edit, &tab);
-        EXPECT_EQ(input.getInputText(),
-                  mentionComma ? "@forsen @pajlada, " : "@forsen @pajlada ");
-
-        // Usernames later in the reply body do not get a comma
-        input.setInputText("@forsen test @paj");
-        edit->moveCursor(QTextCursor::End);
-        EXPECT_FALSE(input.isEditFirstWord());
-        QApplication::sendEvent(edit, &tab);
-        EXPECT_EQ(input.getInputText(), "@forsen test @pajlada ");
-    }
-}
-
-TEST(SplitInput, ReplyPrefixFormatting)
-{
-    MockApplication app;
-    Split split(nullptr);
-    SplitInput input(&split);
-    auto *edit = input.findChild<QTextEdit *>();
-    ASSERT_NE(edit, nullptr);
-
-    auto message = std::make_shared<Message>();
-    message->displayName = "forsen";
-    input.setReply(message, {});
-    input.insertText("pretty much everywhere, it's gonna be hot");
-
-    auto prefixFormatting = [&](const QString &prefix) {
-        QList<QTextEdit::ExtraSelection> result;
-        const auto selections = edit->extraSelections();
-        for (const auto &selection : selections)
-        {
-            if (selection.cursor.selectionStart() == 0 &&
-                selection.cursor.selectionEnd() == prefix.size())
-            {
-                result.append(selection);
-            }
-        }
-        return result;
-    };
-
-    // Reply prefix is set when replying
-    ASSERT_EQ(prefixFormatting("@forsen ").size(), 1);
-    EXPECT_EQ(prefixFormatting("@forsen ").constFirst().cursor.selectedText(),
-              "@forsen ");
-
-    // Reply prefix uses the theme's placeholder colour
-    EXPECT_EQ(
-        prefixFormatting("@forsen ").constFirst().format.foreground().color(),
-        app.theme.messages.textColors.chatPlaceholder);
-
-    // The cursor stays in position after the message
-    EXPECT_EQ(edit->textCursor().position(), input.getInputText().size());
-
-    // Changing the reply target updates the prefix
-    auto other = std::make_shared<Message>();
-    other->displayName = "pajlada";
-    input.setReply(other, {});
-    ASSERT_EQ(prefixFormatting("@pajlada ").size(), 1);
-    EXPECT_EQ(prefixFormatting("@pajlada ").constFirst().cursor.selectedText(),
-              "@pajlada ");
-
-    // Editing the prefix invalidates it
-    input.setInputText("@pajladaX pajaBing");
-    EXPECT_TRUE(prefixFormatting("@pajlada ").isEmpty());
-
-    // Restoring the prefix manually does not restore it on our end
-    input.setInputText("@pajlada pajaBing");
-    EXPECT_TRUE(prefixFormatting("@pajlada ").isEmpty());
-
-    // Cancelling the reply invalidates the prefix
-    input.setReply(message, {});
-    input.setReply(nullptr, {});
-    EXPECT_TRUE(prefixFormatting("@forsen ").isEmpty());
-
-    // Clearing the input invalidates the reply prefix
-    input.setReply(message, {});
-    input.setInputText("");
-    EXPECT_TRUE(prefixFormatting("@forsen ").isEmpty());
 }
 
 INSTANTIATE_TEST_SUITE_P(
@@ -461,3 +195,400 @@ INSTANTIATE_TEST_SUITE_P(
             "",
             // Expected text after replying to forsen
             "@forsen ")));
+
+// External navigation must preserve page identity, selection and close behavior.
+TEST(ChoppaNavigation, SwitchingAndClosingPreservesChatPages)
+{
+    MockApplication app;
+    Notebook notebook(nullptr);
+    notebook.resize(800, 500);
+    notebook.setExternalNavigation(true);
+    auto *first = new QWidget(&notebook);
+    auto *second = new QWidget(&notebook);
+    auto *firstTab = notebook.addPage(first, "first", true);
+    auto *secondTab = notebook.addPage(second, "second", false);
+    notebook.show();
+    notebook.refresh();
+    EXPECT_TRUE(firstTab->isHidden());
+    EXPECT_TRUE(secondTab->isHidden());
+    EXPECT_EQ(first->geometry(), notebook.rect());
+    notebook.selectIndex(1);
+    EXPECT_EQ(notebook.getSelectedPage(), second);
+    EXPECT_TRUE(first->isHidden());
+    EXPECT_EQ(second->geometry(), notebook.rect());
+    EXPECT_EQ(notebook.getVisibleTabCount(), 2);
+    EXPECT_TRUE(notebook.isPageVisible(0));
+    EXPECT_FALSE(notebook.isPageVisible(-1));
+    EXPECT_FALSE(notebook.isPageVisible(2));
+    notebook.rearrangePage(second, 0);
+    EXPECT_EQ(notebook.getSelectedPage(), second);
+    EXPECT_EQ(notebook.getSelectedIndex(), 0);
+    EXPECT_EQ(notebook.getPageAt(1), first);
+    notebook.setTabLocation(NotebookTabLocation::Left);
+    EXPECT_EQ(second->geometry(), notebook.rect());
+    notebook.removePage(second);
+    EXPECT_EQ(notebook.getSelectedPage(), first);
+    EXPECT_EQ(notebook.getPageCount(), 1);
+    EXPECT_EQ(notebook.getPageAt(0), first);
+    EXPECT_TRUE(firstTab->isHidden());
+}
+
+TEST(ChoppaNavigation, UnreadAndTitleChangesReachNavigation)
+{
+    MockApplication app;
+    Notebook notebook(nullptr);
+    notebook.setExternalNavigation(true);
+    auto *page = new QWidget(&notebook);
+    auto *tab = notebook.addPage(page, "first", true);
+    int notifications = 0;
+    QObject::connect(&notebook, &Notebook::navigationChanged, &notebook,
+                     [&notifications] {
+                         ++notifications;
+                     });
+    tab->setHighlightState(HighlightState::Highlighted);
+    EXPECT_EQ(notifications, 0);  // the selected workspace stays read
+    notebook.addPage(new QWidget(&notebook), "active", true);
+    notifications = 0;
+    tab->setHighlightState(HighlightState::Highlighted);
+    EXPECT_GT(notifications, 0);
+    notifications = 0;
+    tab->setCustomTitle("renamed");
+    EXPECT_GT(notifications, 0);
+    EXPECT_EQ(tab->getTitle(), "renamed");
+    EXPECT_EQ(notebook.getPageAt(0), page);
+}
+
+TEST(ChoppaNavigation, LiveSurvivesUnreadMentionAndMarkRead)
+{
+    MockApplication app;
+    Notebook notebook(nullptr);
+    notebook.setExternalNavigation(true);
+    auto *page = new QWidget(&notebook);
+    auto *tab = notebook.addPage(page, "live", true);
+    notebook.addPage(new QWidget(&notebook), "active", true);
+    int updates = 0;
+    QObject::connect(&notebook, &Notebook::navigationChanged, &notebook, [&] {
+        ++updates;
+    });
+    tab->setLive(true);
+    EXPECT_GT(updates, 0);
+    tab->setHighlightState(HighlightState::NewMessage);
+    EXPECT_TRUE(tab->isLive());
+    tab->setHighlightState(HighlightState::Highlighted);
+    EXPECT_TRUE(tab->isLive());
+    tab->setHighlightState(HighlightState::NewMessage);
+    EXPECT_EQ(tab->highlightState(), HighlightState::Highlighted);
+    notebook.select(page);
+    EXPECT_EQ(tab->highlightState(), HighlightState::None);
+    EXPECT_TRUE(tab->isLive());
+    tab->setLive(false);
+    EXPECT_FALSE(tab->isLive());
+}
+
+TEST(ChoppaNavigation, CloseGlyphIsCenteredAndClosesItsWindow)
+{
+    QWidget window;
+    window.setStyleSheet(
+        "QPushButton { text-align: left; padding-left: 12px; }");
+    auto *layout = new QVBoxLayout(&window);
+    auto *titlebar = new ChoppaTitlebar(&window);
+    layout->addWidget(titlebar);
+    window.show();
+    auto *close = titlebar->findChild<QAbstractButton *>("close");
+    ASSERT_NE(close, nullptr);
+    close->clearFocus();
+    QImage image(close->size(), QImage::Format_ARGB32);
+    image.fill(Qt::black);
+    close->render(&image);
+    QRect glyph;
+    for (int y = 0; y < image.height(); ++y)
+        for (int x = 0; x < image.width(); ++x)
+            if (qRed(image.pixel(x, y)) > 180 &&
+                qGreen(image.pixel(x, y)) > 180)
+                glyph = glyph.united(QRect(x, y, 1, 1));
+    ASSERT_FALSE(glyph.isEmpty());
+    EXPECT_NEAR(glyph.center().x(), (image.width() - 1) / 2.0, 1);
+    EXPECT_NEAR(glyph.center().y(), (image.height() - 1) / 2.0, 1);
+    close->click();
+    EXPECT_FALSE(window.isVisible());
+}
+
+TEST(ChoppaNavigation, RestoredWindowSavesCurrentBounds)
+{
+    MockApplication app;
+    BaseWindow window({BaseWindow::EnableCustomFrame, BaseWindow::ContentChrome,
+                       BaseWindow::DisableLayoutSave});
+    window.setGeometry(80, 80, 780, 510);
+    window.show();
+    QApplication::processEvents();
+    window.setGeometry(90, 100, 760, 490);
+    // Saving must not depend on a queued native resize-cache update.
+    EXPECT_EQ(window.getBounds(), window.geometry());
+}
+
+TEST(ChoppaMedia, ExportOfflineDemo)
+{
+    const auto directory = qEnvironmentVariable("CHOPPA_MEDIA_DIRECTORY");
+    if (directory.isEmpty())
+        GTEST_SKIP() << "Media export is opt-in";
+    MockApplication app;
+    Window window(WindowType::Main, nullptr);
+    window.resize(1000, 520);
+    auto &notebook = window.getNotebook();
+    const QStringList names{"choppa_demo", "creative",  "music",
+                            "speedruns",   "community", "development",
+                            "highlights",  "mentions"};
+    for (int i = 0; i < names.size(); ++i)
+    {
+        auto *page = notebook.addPage(i == 0);
+        auto *split = page->appendNewSplit(false);
+        auto channel = std::make_shared<Channel>(names[i], Channel::Type::Misc);
+        const QStringList authors{"zekovdev", "pixelpilot", "midnight",
+                                  "bytewave", "luna",       "community"};
+        const QStringList lines{
+            "hey everyone, what are we working on tonight?",
+            "still fixing my keybinds",
+            "does anyone have the link from earlier?",
+            "check the pinned message",
+            "Twitch, Kick, tabs and splits in one place",
+            "these are fictional messages in an offline demo",
+            "just got here, did I miss anything?",
+            "we are setting up the next session",
+            "sounds good, give me five minutes",
+            "thanks to everyone building open-source chat tools",
+            "one more tweak before calling it a night",
+            "see you in chat"};
+        for (int line = 0; line < lines.size(); ++line)
+        {
+            MessageBuilder builder;
+            builder.append(std::make_unique<TextElement>(
+                QString("20:%1").arg(line + 10), MessageElementFlag::Text,
+                QColor("#777777")));
+            builder.append(std::make_unique<TextElement>(
+                authors[line % authors.size()] + ":", MessageElementFlag::Text,
+                QColor(line % 2 ? "#b4b6ff" : "#6ecfbe")));
+            builder.append(std::make_unique<TextElement>(
+                lines[line], MessageElementFlag::Text));
+            channel->addMessage(builder.release(), MessageContext::Repost);
+        }
+        split->setChannel(IndirectChannel(channel));
+        page->getTab()->setCustomTitle(names[i]);
+        page->getTab()->setLive(i == 1 || i == 3);
+        split->getChannelView().setOverrideFlags(MessageElementFlag::Text);
+    }
+    notebook.selectIndex(0);
+    notebook.getSelectedPage()->getSplits().front()->getInput().setInputText(
+        "anyone up for another round?");
+    window.show();
+    QApplication::processEvents();
+    EXPECT_TRUE(window.grab().save(directory + "/chat.png"));
+    for (auto *button : window.findChildren<QPushButton *>())
+    {
+        if (button->accessibleName() == "Toggle sidebar")
+        {
+            button->click();
+            QApplication::processEvents();
+            EXPECT_TRUE(window.grab().save(directory + "/sidebar.png"));
+            button->click();
+            break;
+        }
+    }
+    LoginDialog login(nullptr);
+    login.show();
+    QApplication::processEvents();
+    EXPECT_TRUE(login.grab().save(directory + "/account.png"));
+    login.close();
+    SettingsDialog::showDialog(&window);
+    QApplication::processEvents();
+    bool capturedSettings = false;
+    for (auto *widget : QApplication::topLevelWidgets())
+    {
+        if (auto *settings = dynamic_cast<SettingsDialog *>(widget))
+        {
+            capturedSettings = settings->grab().save(directory + "/settings.png");
+            settings->close();
+        }
+    }
+    EXPECT_TRUE(capturedSettings);
+    QMenu moderation;
+    moderation.setStyleSheet(
+        "QMenu { background: #151515; color: #eeeeee; border: none; "
+        "padding: 8px; font: 12px 'Outfit'; } QMenu::item { padding: 8px "
+        "22px; border-radius: 5px; } QMenu::item:selected { background: "
+        "#303030; } QMenu::separator { height: 1px; background: #292929; "
+        "margin: 5px 8px; }");
+    moderation.addSection("Moderation in #choppa_demo");
+    appendChoppaModerationActions(&moderation, false, true,
+        [](const QString &, const QString &) { ADD_FAILURE() << "Capture must not execute moderation"; });
+    moderation.show();
+    QApplication::processEvents();
+    EXPECT_TRUE(moderation.grab().save(directory + "/moderation.png"));
+    auto *timeouts = moderation.actions().at(1)->menu();
+    ASSERT_NE(timeouts, nullptr);
+    timeouts->setStyleSheet(moderation.styleSheet());
+    timeouts->show();
+    QApplication::processEvents();
+    EXPECT_TRUE(timeouts->grab().save(directory + "/timeouts.png"));
+    timeouts->close();
+    moderation.close();
+    notebook.getSelectedPage()->getTab()->showContextMenu(QPoint(40, 40));
+    QApplication::processEvents();
+    if (auto *popup = QApplication::activePopupWidget())
+    {
+        EXPECT_TRUE(popup->grab().save(directory + "/workspace-menu.png"));
+        popup->close();
+    }
+}
+
+TEST(ChoppaNavigation, BundledDictionariesRecognizeEnglishAndGerman)
+{
+#ifdef CHATTERINO_WITH_SPELLCHECK
+    const auto directory = qEnvironmentVariable("CHOPPA_TEST_DICTIONARIES");
+    if (directory.isEmpty())
+        GTEST_SKIP() << "No packaged dictionaries supplied";
+    MockApplication app;
+    app.settings.spellCheckingDefaultDictionary = directory + "/de_DE";
+    SpellChecker german;
+    ASSERT_TRUE(german.isLoaded());
+    EXPECT_TRUE(german.check(QString::fromUtf8("Grüße")));
+    EXPECT_TRUE(german.check(QString::fromUtf8("Straße")));
+    EXPECT_FALSE(german.check("zzqxxyyzz"));
+    app.settings.spellCheckingDefaultDictionary = directory + "/en_US";
+    SpellChecker english;
+    ASSERT_TRUE(english.isLoaded());
+    EXPECT_TRUE(english.check("community"));
+    EXPECT_FALSE(english.check("commmunity"));
+#else
+    GTEST_SKIP() << "Spell checking is not compiled in";
+#endif
+}
+
+TEST(ChoppaNavigation, ThemeRoundTripRestoresExistingMessageColors)
+{
+    MockApplication app;
+    Split split(nullptr);
+    auto &view = split.getChannelView();
+    auto channel = std::make_shared<Channel>("theme-test", Channel::Type::Misc);
+    MessageBuilder builder;
+    builder.append(std::make_unique<TextElement>("Theme contrast regression",
+                                                 MessageElementFlag::Text));
+    channel->addMessage(builder.release(), MessageContext::Repost);
+    view.setChannel(channel);
+    view.setOverrideFlags(MessageElementFlag::Text);
+    view.resize(420, 120);
+    app.theme.themeName = "Choppa";
+    view.show();
+    QApplication::processEvents();
+    const auto before = view.grab().toImage();
+    app.theme.themeName = "Light";
+    QApplication::processEvents();
+    const auto light = view.grab().toImage();
+    EXPECT_NE(before, light);
+    app.theme.themeName = "Choppa";
+    QApplication::processEvents();
+    const auto after = view.grab().toImage();
+    EXPECT_EQ(before, after);
+}
+
+TEST(ChoppaNavigation, LoginCategoriesPreserveAllProviders)
+{
+    MockApplication app;
+    LoginDialog dialog(nullptr);
+    auto *tabs = dialog.findChild<QTabWidget *>();
+    ASSERT_NE(tabs, nullptr);
+    EXPECT_EQ(tabs->count(), 3);
+    EXPECT_TRUE(tabs->tabBar()->isHidden());
+    auto *group = dialog.findChild<QButtonGroup *>();
+    ASSERT_NE(group, nullptr);
+    for (int index : {1, 2, 0})
+    {
+        ASSERT_NE(group->button(index), nullptr);
+        group->button(index)->click();
+        EXPECT_EQ(tabs->currentIndex(), index);
+        EXPECT_TRUE(group->button(index)->isChecked());
+        dialog.show();
+        QApplication::processEvents();
+        auto *page = tabs->currentWidget();
+        for (auto *button : page->findChildren<QPushButton *>())
+        {
+            if (button->isVisible())
+            {
+                const auto bottom =
+                    button->mapTo(page, button->rect().bottomRight());
+                EXPECT_LT(bottom.y(), page->height());
+                EXPECT_LT(bottom.x(), page->width());
+            }
+        }
+        const auto captureDir = qEnvironmentVariable("CHOPPA_DIALOG_CAPTURES");
+        if (!captureDir.isEmpty())
+        {
+            EXPECT_TRUE(dialog.grab().save(captureDir + "/login-" +
+                                           QString::number(index) + ".png"));
+        }
+    }
+    EXPECT_TRUE(dialog.windowFlags().testFlag(Qt::FramelessWindowHint));
+}
+
+TEST(ChoppaNavigation, SettingsSectionsFitAndRemainReachable)
+{
+    auto view = std::unique_ptr<GeneralPageView>(
+        GeneralPageView::withNavigation(nullptr));
+    view->resize(640, 300);
+    view->addTitle("Interface");
+    view->addDropdown("Theme", {"Choppa", "Light"});
+    for (int i = 0; i < 20; ++i)
+        view->addWidget(new QLabel("An ordinary setting"));
+    auto *last = view->addTitle("Advanced");
+    view->addWidget(new QLabel("Last setting"));
+    view->show();
+    QApplication::processEvents();
+    auto *scroll = view->findChild<QScrollArea *>();
+    auto *picker = view->findChild<QComboBox *>();
+    ASSERT_NE(scroll, nullptr);
+    ASSERT_NE(picker, nullptr);
+    EXPECT_EQ(scroll->horizontalScrollBar()->maximum(), 0);
+    picker->setCurrentIndex(1);
+    Q_EMIT picker->activated(1);
+    EXPECT_GT(scroll->verticalScrollBar()->value(), 0);
+    EXPECT_LE(last->y() - scroll->verticalScrollBar()->value(),
+              scroll->viewport()->height());
+    EXPECT_FALSE(view->filterElements("nothing-matches-this"));
+    EXPECT_FALSE(picker->isEnabled());
+    EXPECT_TRUE(view->filterElements(""));
+    EXPECT_TRUE(picker->isEnabled());
+}
+
+TEST(ChoppaModeration, PresetsDispatchCorrectCommands)
+{
+    MockApplication app;
+    QMenu twitch;
+    QString command;
+    QString argument;
+    auto record = [&](const QString &verb, const QString &args) {
+        command = verb;
+        argument = args;
+    };
+    appendChoppaModerationActions(&twitch, false, true, record);
+    auto *timeouts = twitch.actions().at(0)->menu();
+    ASSERT_NE(timeouts, nullptr);
+    ASSERT_EQ(timeouts->actions().size(), 8);
+    timeouts->actions().first()->trigger();
+    EXPECT_EQ(command, "/timeout");
+    EXPECT_EQ(argument, "30");
+    timeouts->actions().last()->trigger();
+    EXPECT_EQ(argument, "604800");
+    twitch.actions().at(1)->menu()->actions().at(1)->trigger();
+    EXPECT_EQ(command, "/ban");
+    EXPECT_EQ(argument, "Spam");
+    twitch.actions().at(2)->trigger();
+    EXPECT_EQ(command, "/unban");
+    EXPECT_TRUE(argument.isEmpty());
+    twitch.actions().at(3)->menu()->actions().last()->trigger();
+    EXPECT_EQ(command, "/unrestrict");
+    QMenu kick;
+    appendChoppaModerationActions(&kick, true, false, record);
+    ASSERT_EQ(kick.actions().size(), 3);
+    kick.actions().first()->menu()->actions().first()->trigger();
+    EXPECT_EQ(command, "/timeout");
+    EXPECT_EQ(argument, "60");
+}

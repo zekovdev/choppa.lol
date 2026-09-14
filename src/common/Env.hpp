@@ -15,8 +15,6 @@ namespace env {
 
 constexpr const char *LOG_TO_FILE = "CHATTERINO_LOG_TO_FILE";
 
-bool readBool(const char *envName, bool defaultValue);
-
 }  // namespace env
 
 class Env

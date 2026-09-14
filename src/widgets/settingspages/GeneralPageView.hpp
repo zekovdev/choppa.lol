@@ -276,6 +276,7 @@ private:
     QScrollArea *contentScrollArea_ = nullptr;
     QVBoxLayout *contentLayout_ = nullptr;
     QVBoxLayout *navigationLayout_ = nullptr;
+    QComboBox *sectionPicker_ = nullptr;
 
     std::vector<Group> groups_;
     pajlada::Signals::SignalHolder managedConnections_;

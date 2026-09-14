@@ -9,6 +9,8 @@
 #include <QColor>
 #include <QPainter>
 
+#include <optional>
+
 namespace pajlada::Signals {
 class SignalHolder;
 }  // namespace pajlada::Signals
@@ -52,12 +54,15 @@ struct MessagePreferences {
     Qt::BrushStyle lastMessagePattern{};
 
     bool enableRedeemedHighlight{};
+    bool enableElevatedMessageHighlight{};
     bool enableFirstMessageHighlight{};
     bool enableSubHighlight{};
     bool enableWatchStreakHighlight{};
     bool enableAutomodHighlight{};
     bool enableAnnouncementHighlight{};
     bool enableColoredAnnouncementHighlight{};
+
+    bool seventvStyledHighlights{};
 
     bool alternateMessages{};
     bool separateMessages{};
@@ -103,5 +108,18 @@ struct MessageLayoutContext {
     Channel *selectedChannel = nullptr;
     const Message &message;
 };
+
+/// 7TV-style special message rendering: an accent color and a small
+/// uppercase label shown in the top-right corner of the message.
+struct SeventvHighlightStyle {
+    QColor accent;
+    QString label;
+};
+
+/// Returns the 7TV highlight style for @a message, or nullopt if the message
+/// isn't special or the "7TV styled highlights" setting is disabled.
+std::optional<SeventvHighlightStyle> seventvHighlightStyle(
+    const Message &message, bool ignoreHighlights,
+    const QString &currentLogin);
 
 }  // namespace chatterino

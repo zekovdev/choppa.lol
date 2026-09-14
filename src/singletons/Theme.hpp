@@ -178,10 +178,12 @@ public:
 
     pajlada::Signals::NoArgSignal updated;
 
-    QStringSetting themeName{"/appearance/theme/name", "Dark"};
+    BoolSetting choppaMigrated{"/appearance/choppaMigrated", false};
+    QStringSetting themeName{"/appearance/theme/name", "Choppa"};
     QStringSetting lightSystemThemeName{"/appearance/theme/lightSystem",
                                         "Light"};
-    QStringSetting darkSystemThemeName{"/appearance/theme/darkSystem", "Dark"};
+    QStringSetting darkSystemThemeName{"/appearance/theme/darkSystem",
+                                       "Choppa"};
 
 private:
     bool isLight_ = false;

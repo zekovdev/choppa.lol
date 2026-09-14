@@ -13,6 +13,7 @@
 #include "widgets/helper/KickAccountSwitchWidget.hpp"
 #include "widgets/helper/MicroNotebook.hpp"
 
+#include <QLabel>
 #include <QLayout>
 #include <QPainter>
 #include <QPushButton>
@@ -53,13 +54,19 @@ AccountSwitchPopup::AccountSwitchPopup(QWidget *parent)
             notebook->setShowHeader(true);
         }
     };
-    updateNotebook();
     this->signalHolder_.addConnection(
         getApp()->getAccounts()->kick.userListUpdated.connect(updateNotebook));
 
     notebook->addPage(this->ui_.accountSwitchWidget, "Twitch");
     notebook->addPage(this->ui_.kickAccountSwitcher, "Kick");
+    updateNotebook();
     QVBoxLayout *vbox = new QVBoxLayout(this);
+    vbox->setContentsMargins(8, 8, 8, 8);
+    vbox->setSpacing(6);
+    auto *heading = new QLabel(tr("Accounts"));
+    heading->setStyleSheet(
+        "color: #999999; font: 12px 'Outfit'; padding: 2px 6px;");
+    vbox->addWidget(heading);
     vbox->addWidget(notebook);
 
     auto *hbox = new QHBoxLayout();
@@ -70,14 +77,15 @@ AccountSwitchPopup::AccountSwitchPopup(QWidget *parent)
     vbox->addLayout(hbox);
 
     connect(manageAccountsButton, &QPushButton::clicked, [this]() {
+        this->hide();
         SettingsDialog::showDialog(this->parentWidget(),
                                    SettingsDialogPreference::Accounts);
     });
 
     this->getLayoutContainer()->setLayout(vbox);
 
-    this->setScaleIndependentSize(200, 200);
     this->themeChangedEvent();
+    this->refresh();
 }
 
 void AccountSwitchPopup::themeChangedEvent()
@@ -90,17 +98,27 @@ void AccountSwitchPopup::themeChangedEvent()
     };
     this->setStyleSheet(uR"(
         QListView {
+            border: none;
+            font-family: Outfit;
             color: %1;
             background: %2;
+        }
+        QListView::item {
+            padding: 6px 8px;
+            border-radius: 6px;
         }
         QListView::item:hover {
             background: %3;
         }
         QListView::item:selected {
-            background: %4;
+            background: #242424;
+            color: #ffffff;
         }
 
         QPushButton {
+            border: none;
+            border-radius: 8px;
+            padding: 6px;
             background: %5;
             color: %1;
         }
@@ -125,14 +143,22 @@ void AccountSwitchPopup::refresh()
 {
     this->ui_.accountSwitchWidget->refresh();
     this->ui_.kickAccountSwitcher->refresh();
+    const bool hasKick = !getApp()->getAccounts()->kick.accounts.empty();
+    const int rows =
+        std::clamp(std::max(this->ui_.accountSwitchWidget->count(),
+                            this->ui_.kickAccountSwitcher->count()),
+                   1, 8);
+    this->setScaleIndependentSize(224, 80 + rows * 30 + (hasKick ? 36 : 0));
 }
 
 void AccountSwitchPopup::paintEvent(QPaintEvent *)
 {
     QPainter painter(this);
 
-    painter.setPen(QColor("#999"));
-    painter.drawRect(0, 0, this->width() - 1, this->height() - 1);
+    painter.setRenderHint(QPainter::Antialiasing);
+    painter.setBrush(QColor("#111111"));
+    painter.setPen(QColor("#333333"));
+    painter.drawRoundedRect(this->rect().adjusted(1, 1, -1, -1), 8, 8);
 }
 
 }  // namespace chatterino

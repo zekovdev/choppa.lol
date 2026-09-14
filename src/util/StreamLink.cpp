@@ -5,7 +5,6 @@
 #include "util/StreamLink.hpp"
 
 #include "Application.hpp"
-#include "common/LinkParser.hpp"
 #include "common/QLogging.hpp"
 #include "common/Version.hpp"
 #include "singletons/Settings.hpp"
@@ -40,7 +39,7 @@ QString getStreamlinkPath()
 void showStreamlinkNotFoundError()
 {
     static auto *msg = new QErrorMessage;
-    msg->setWindowTitle("Chatterino - streamlink not found");
+    msg->setWindowTitle("Zekerino - streamlink not found");
 
     if (getSettings()->streamlinkUseCustomPath)
     {
@@ -160,12 +159,12 @@ void getStreamQualities(const QString &channelURL,
     p->start();
 }
 
-void openStreamlink(const QString &url, const QString &quality,
+void openStreamlink(const QString &channelURL, const QString &quality,
                     QStringList extraArguments)
 {
     auto *proc = createStreamlinkProcess();
     auto arguments = proc->arguments()
-                     << std::move(extraArguments) << url << quality;
+                     << std::move(extraArguments) << channelURL << quality;
 
     // Remove empty arguments before appending additional streamlink options
     // as the options might purposely contain empty arguments
@@ -183,42 +182,33 @@ void openStreamlink(const QString &url, const QString &quality,
     }
 }
 
-void openStreamlinkForChannelOrUrl(const QString &channelOrUrl,
-                                   QStringView prefixURL)
+void openStreamlinkForChannel(const QString &channel, QStringView prefixURL)
 {
     static const QString INFO_TEMPLATE("Opening %1 in Streamlink ...");
 
-    SplitContainer *currentPage = getApp()
-                                      ->getWindows()
-                                      ->getLastSelectedWindow()
-                                      ->getNotebook()
-                                      .getSelectedPage();
+    auto *currentPage = dynamic_cast<SplitContainer *>(getApp()
+                                                           ->getWindows()
+                                                           ->getMainWindow()
+                                                           .getNotebook()
+                                                           .getSelectedPage());
     if (currentPage != nullptr)
     {
         auto *currentSplit = currentPage->getSelectedSplit();
         if (currentSplit != nullptr)
         {
             currentSplit->getChannel()->addSystemMessage(
-                INFO_TEMPLATE.arg(channelOrUrl));
+                INFO_TEMPLATE.arg(channel));
         }
     }
 
-    QString url;
-    if (linkparser::parse(channelOrUrl).has_value())
-    {
-        url = channelOrUrl;
-    }
-    else
-    {
-        url = prefixURL % channelOrUrl;
-    }
+    QString channelURL = prefixURL % channel;
 
     auto preferredQuality = getSettings()->preferredQuality.getEnum();
 
     if (preferredQuality == StreamLinkPreferredQuality::Choose)
     {
-        getStreamQualities(url, [=](QStringList qualityOptions) {
-            QualityPopup::showDialog(url, qualityOptions);
+        getStreamQualities(channelURL, [=](QStringList qualityOptions) {
+            QualityPopup::showDialog(channelURL, qualityOptions);
         });
 
         return;
@@ -259,7 +249,7 @@ void openStreamlinkForChannelOrUrl(const QString &channelOrUrl,
         args << "--stream-sorting-excludes" << exclude;
     }
 
-    openStreamlink(url, quality, args);
+    openStreamlink(channelURL, quality, args);
 }
 
 }  // namespace chatterino

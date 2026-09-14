@@ -4,7 +4,6 @@
 
 #include "Test.hpp"
 
-#include <chatterino-test/TestConfig.hpp>
 #include <QString>
 #include <QStringView>
 

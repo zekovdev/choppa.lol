@@ -1,0 +1,16 @@
+/* Choppa controls for channel selection and workspace dialogs. */
+QWidget { font-family: 'Outfit'; font-size: 12px; color: #cccccc; }
+QLabel { background: transparent; }
+QLineEdit, QComboBox { background: #1a1a1a; color: white; border: 1px solid #333333; border-radius: 6px; padding: 6px 8px; selection-background-color: #444444; }
+QLineEdit:focus, QComboBox:focus { border-color: #77777d; }
+QPushButton { background: #1a1a1a; color: white; border: 1px solid transparent; border-radius: 6px; padding: 6px 12px; }
+QPushButton:hover { background: #242424; }
+QPushButton:focus { border-color: #77777d; }
+QPushButton:default { background: #d6d6d6; color: #0a0a0a; }
+QPushButton:disabled { color: #666666; }
+QRadioButton { spacing: 8px; padding: 2px 0; }
+QRadioButton::indicator { width: 16px; height: 16px; border: 1px solid #77777d; border-radius: 8px; background: #111111; }
+QRadioButton::indicator:checked { background: #d6d6d6; border: 4px solid #333333; width: 10px; height: 10px; }
+QTabBar::tab { background: #111111; color: #999999; padding: 10px 18px; border-radius: 8px; }
+QTabBar::tab:selected { background: #1a1a1a; color: white; }
+QTableView { background: #111111; border: 1px solid #242424; selection-background-color: #333333; }

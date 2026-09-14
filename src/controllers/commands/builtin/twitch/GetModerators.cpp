@@ -69,7 +69,7 @@ QString getModerators(const CommandContext &ctx)
     }
 
     getHelix()->getModerators(
-        ctx.twitchChannel->roomId(), 500, nullptr,
+        ctx.twitchChannel->roomId(), 500,
         [channel{ctx.channel}, twitchChannel{ctx.twitchChannel}](auto result) {
             if (result.empty())
             {

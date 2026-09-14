@@ -49,7 +49,6 @@
 #include "widgets/Window.hpp"
 
 #include <IrcConnection>
-#include <QDateTime>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
@@ -124,18 +123,12 @@ TwitchChannel::TwitchChannel(const QString &name)
     , bttvEmotes_(std::make_shared<EmoteMap>())
     , ffzEmotes_(std::make_shared<EmoteMap>())
     , seventvEmotes_(std::make_shared<EmoteMap>())
-    , mod_(getApp()->getTwitch()->isModeratorIn(name))
-    , nextSharedChatSessionProbe_(QDateTime::currentDateTime())
 {
     qCDebug(chatterinoTwitch) << "[TwitchChannel" << name << "] Opened";
 
     this->signalHolder_.managedConnect(
         getApp()->getAccounts()->twitch.currentUserAboutToChange,
         [this](const auto & /*oldAccount*/, const auto & /*newAccount*/) {
-            qCDebug(chatterinoTwitchEventSub)
-                << "Current user about to change, drop all eventsub handles in "
-                   "preparation"
-                << this->roomId();
             this->eventSubChannelChatUserMessageHoldHandle.reset();
             this->eventSubChannelChatUserMessageUpdateHandle.reset();
             this->eventSubChannelModerateHandle.reset();
@@ -188,11 +181,6 @@ TwitchChannel::TwitchChannel(const QString &name)
         this->cleanUpReplyThreads();
     });
     this->threadClearTimer_.start(5 * 60 * 1000);
-
-    QObject::connect(&this->nextSharedChatSessionUpdateTimer_, &QTimer::timeout,
-                     &this->lifetimeGuard_, [this] {
-                         this->refreshSharedChatSessionState();
-                     });
 
     this->signalHolder_.managedConnect(
         getApp()->getAccounts()->twitch.emotesReloaded,
@@ -614,10 +602,6 @@ void TwitchChannel::updateStreamStatus(
     if (helixStream)
     {
         auto stream = *helixStream;
-        if (!stream.userName.isEmpty())
-        {
-            this->updateDisplayName(stream.userName);
-        }
         {
             auto status = this->streamStatus_.access();
             status->streamId = stream.id;
@@ -664,36 +648,24 @@ void TwitchChannel::onLiveStatusChanged(bool isLive, bool isInitialUpdate)
 {
     // Similar code exists in NotificationController::updateFakeChannel.
     // Since we're a TwitchChannel, we also send a message here.
-    const HelixMinimalUser channel{
-        .id = this->roomId(),
-        .login = this->getName(),
-        .displayName = this->nameOptions.actualDisplayName,
-    };
     if (isLive)
     {
         qCDebug(chatterinoTwitch).nospace().noquote()
             << "[TwitchChannel " << this->getName() << "] Online";
 
-        QString streamId;
-        QString title;
-        {
-            const auto streamStatus = this->accessStreamStatus();
-            streamId = streamStatus->streamId;
-            title = streamStatus->title;
-        }
         getApp()->getNotifications()->notifyTwitchChannelLive({
             .channelId = this->roomId(),
-            .streamId = streamId,
             .channelName = this->getName(),
-            .displayName = channel.displayName,
-            .title = title,
+            .displayName = this->getDisplayName(),
+            .title = this->accessStreamStatus()->title,
             .isInitialUpdate = isInitialUpdate,
         });
 
         // Channel live message
         this->addMessage(
             MessageBuilder::makeLiveMessage(
-                channel, title,
+                this->getDisplayName(), this->roomId(),
+                this->accessStreamStatus()->title,
                 {MessageFlag::System, MessageFlag::DoNotTriggerNotification}),
             MessageContext::Original);
     }
@@ -703,7 +675,8 @@ void TwitchChannel::onLiveStatusChanged(bool isLive, bool isInitialUpdate)
             << "[TwitchChannel " << this->getName() << "] Offline";
 
         // Channel offline message
-        this->addMessage(MessageBuilder::makeOfflineSystemMessage(channel),
+        this->addMessage(MessageBuilder::makeOfflineSystemMessage(
+                             this->getDisplayName(), this->roomId()),
                          MessageContext::Original);
 
         getApp()->getNotifications()->notifyTwitchChannelOffline(
@@ -800,7 +773,6 @@ void TwitchChannel::roomIdChanged()
     this->joinBttvChannel();
     this->listenSevenTVCosmetics();
     getApp()->getTwitchLiveController()->add(this->sharedFromThis());
-    this->refreshPinnedMessage();
 }
 
 QString TwitchChannel::prepareMessage(const QString &message) const
@@ -954,12 +926,6 @@ void TwitchChannel::setMod(bool value)
         this->mod_ = value;
 
         this->userStateChanged.invoke();
-
-        if (value)
-        {
-            // Gained mod privileges - fetch the current pin
-            this->refreshPinnedMessage();
-        }
     }
 }
 
@@ -1073,7 +1039,7 @@ SharedAccessGuard<const TwitchChannel::StreamStatus>
     return this->streamStatus_.accessConst();
 }
 
-std::optional<EmotePtr> TwitchChannel::twitchEmote(EmoteNameView name) const
+std::optional<EmotePtr> TwitchChannel::twitchEmote(const EmoteName &name) const
 {
     auto emotes = this->localTwitchEmotes();
     auto it = emotes->find(name);
@@ -1085,7 +1051,7 @@ std::optional<EmotePtr> TwitchChannel::twitchEmote(EmoteNameView name) const
     return it->second;
 }
 
-std::optional<EmotePtr> TwitchChannel::bttvEmote(EmoteNameView name) const
+std::optional<EmotePtr> TwitchChannel::bttvEmote(const EmoteName &name) const
 {
     auto emotes = this->bttvEmotes_.get();
     auto it = emotes->find(name);
@@ -1097,7 +1063,7 @@ std::optional<EmotePtr> TwitchChannel::bttvEmote(EmoteNameView name) const
     return it->second;
 }
 
-std::optional<EmotePtr> TwitchChannel::ffzEmote(EmoteNameView name) const
+std::optional<EmotePtr> TwitchChannel::ffzEmote(const EmoteName &name) const
 {
     auto emotes = this->ffzEmotes_.get();
     auto it = emotes->find(name);
@@ -1109,7 +1075,7 @@ std::optional<EmotePtr> TwitchChannel::ffzEmote(EmoteNameView name) const
     return it->second;
 }
 
-std::optional<EmotePtr> TwitchChannel::seventvEmote(EmoteNameView name) const
+std::optional<EmotePtr> TwitchChannel::seventvEmote(const EmoteName &name) const
 {
     auto emotes = this->seventvEmotes_.get();
     auto it = emotes->find(name);
@@ -1327,13 +1293,12 @@ void TwitchChannel::updateSeventvData(const QString &newUserID,
 void TwitchChannel::addOrReplaceLiveUpdatesAddRemove(bool isEmoteAdd,
                                                      const QString &platform,
                                                      const QString &actor,
-                                                     const QString &emoteName,
-                                                     const QDateTime &now)
+                                                     const QString &emoteName)
 {
     if (this->tryReplaceLastLiveUpdateAddOrRemove(
             isEmoteAdd ? MessageFlag::LiveUpdatesAdd
                        : MessageFlag::LiveUpdatesRemove,
-            platform, actor, emoteName, now))
+            platform, actor, emoteName))
     {
         return;
     }
@@ -1344,13 +1309,13 @@ void TwitchChannel::addOrReplaceLiveUpdatesAddRemove(bool isEmoteAdd,
     if (isEmoteAdd)
     {
         msg = MessageBuilder(liveUpdatesAddEmoteMessage, platform, actor,
-                             this->lastLiveUpdateEmoteNames_, now)
+                             this->lastLiveUpdateEmoteNames_)
                   .release();
     }
     else
     {
         msg = MessageBuilder(liveUpdatesRemoveEmoteMessage, platform, actor,
-                             this->lastLiveUpdateEmoteNames_, now)
+                             this->lastLiveUpdateEmoteNames_)
                   .release();
     }
     this->lastLiveUpdateEmotePlatform_ = platform;
@@ -1361,7 +1326,7 @@ void TwitchChannel::addOrReplaceLiveUpdatesAddRemove(bool isEmoteAdd,
 
 bool TwitchChannel::tryReplaceLastLiveUpdateAddOrRemove(
     MessageFlag op, const QString &platform, const QString &actor,
-    const QString &emoteName, const QDateTime &now)
+    const QString &emoteName)
 {
     if (this->lastLiveUpdateEmotePlatform_ != platform)
     {
@@ -1369,7 +1334,8 @@ bool TwitchChannel::tryReplaceLastLiveUpdateAddOrRemove(
     }
     auto last = this->lastLiveUpdateMessage_.lock();
     if (!last || !last->flags.has(op) ||
-        last->serverReceivedTime < now.addSecs(-5) || last->loginName != actor)
+        last->parseTime < QTime::currentTime().addSecs(-5) ||
+        last->loginName != actor)
     {
         return false;
     }
@@ -1380,15 +1346,19 @@ bool TwitchChannel::tryReplaceLastLiveUpdateAddOrRemove(
         if (op == MessageFlag::LiveUpdatesAdd)
         {
             return {
-                liveUpdatesAddEmoteMessage,      platform, last->loginName,
-                this->lastLiveUpdateEmoteNames_, now,
+                liveUpdatesAddEmoteMessage,
+                platform,
+                last->loginName,
+                this->lastLiveUpdateEmoteNames_,
             };
         }
 
         // op == RemoveEmoteMessage
         return {
-            liveUpdatesRemoveEmoteMessage,   platform, last->loginName,
-            this->lastLiveUpdateEmoteNames_, now,
+            liveUpdatesRemoveEmoteMessage,
+            platform,
+            last->loginName,
+            this->lastLiveUpdateEmoteNames_,
         };
     };
 
@@ -1593,13 +1563,9 @@ void TwitchChannel::refreshPubSub()
     auto currentAccount = getApp()->getAccounts()->twitch.getCurrent();
 
     getApp()->getTwitchPubSub()->listenToChannelPointRewards(roomId);
-    getApp()->getTwitchPubSub()->listenToPinnedChatUpdates(roomId);
 
     if (currentAccount->isAnon())
     {
-        qCDebug(chatterinoTwitchEventSub)
-            << "Current account is anon - drop all privileged eventsub handles"
-            << this->roomId();
         this->eventSubChannelModerateHandle.reset();
         this->eventSubAutomodMessageHoldHandle.reset();
         this->eventSubAutomodMessageUpdateHandle.reset();
@@ -1614,10 +1580,6 @@ void TwitchChannel::refreshPubSub()
 
     if (this->hasModRights())
     {
-        qCDebug(chatterinoTwitchEventSub)
-            << "Current account is mod - subscribe to privileged eventsub "
-               "handles"
-            << this->roomId();
         this->eventSubChannelModerateHandle =
             getApp()->getEventSub()->subscribe(eventsub::SubscriptionRequest{
                 .subscriptionType = "channel.moderate",
@@ -1709,10 +1671,6 @@ void TwitchChannel::refreshPubSub()
     }
     else
     {
-        qCDebug(chatterinoTwitchEventSub)
-            << "Current account is no longer a moderator - drop privileged "
-               "eventsub handles"
-            << this->roomId();
         this->eventSubChannelModerateHandle.reset();
         this->eventSubAutomodMessageHoldHandle.reset();
         this->eventSubAutomodMessageUpdateHandle.reset();
@@ -1781,7 +1739,7 @@ void TwitchChannel::refreshChatters()
     getHelix()->getChatters(
         this->roomId(),
         getApp()->getAccounts()->twitch.getCurrent()->getUserId(),
-        MAX_CHATTERS_TO_FETCH, nullptr,
+        MAX_CHATTERS_TO_FETCH,
         [weak = this->weakFromThis()](const auto &result) {
             if (auto shared = weak.lock())
             {
@@ -2564,235 +2522,6 @@ void TwitchChannel::setSendWait(int seconds)
 bool TwitchChannel::isLoadingRecentMessages() const
 {
     return this->loadingRecentMessages_.test();
-}
-
-const std::vector<HelixMinimalUser> &
-    TwitchChannel::getSharedChatSessionParticipants() const
-{
-    return this->sharedChatSessionParticipants_;
-}
-
-void TwitchChannel::probeSharedChatSession()
-{
-    auto now = QDateTime::currentDateTime();
-
-    if (!this->nextSharedChatSessionUpdateTimer_.isActive() &&
-        now >= this->nextSharedChatSessionProbe_)
-    {
-        this->nextSharedChatSessionProbe_ = now.addSecs(30);
-        this->refreshSharedChatSessionState();
-    }
-}
-
-void TwitchChannel::refreshSharedChatSessionState()
-{
-    getHelix()->getSharedChatSession(
-        this->roomId(),
-        [this,
-         weak = this->weakFromThis()](const HelixSharedChatSession &session) {
-            const auto self = weak.lock();
-            if (!self)
-            {
-                return;
-            }
-
-            auto intervalSecs = std::clamp(
-                getSettings()->sharedChatSessionRefreshInterval.getValue(), 5,
-                999);
-            this->nextSharedChatSessionUpdateTimer_.setInterval(intervalSecs *
-                                                                1000);
-
-            if (session.participantIds.empty())
-            {
-                // Allow immediate re-probe
-                this->nextSharedChatSessionProbe_ =
-                    QDateTime::currentDateTime();
-                this->nextSharedChatSessionUpdateTimer_.stop();
-
-                this->sharedChatSessionParticipants_.clear();
-                this->sharedChatSessionParticipantIds_.clear();
-
-                this->sharedChatStatusChanged.invoke({});
-
-                return;
-            }
-
-            bool participantsDiffer =
-                session.participantIds.size() - 1 !=
-                this->sharedChatSessionParticipantIds_.size();
-            if (!participantsDiffer)
-            {
-                for (const auto &broadcasterID : session.participantIds)
-                {
-                    if (this->roomId() == broadcasterID)
-                    {
-                        continue;
-                    }
-
-                    if (!this->sharedChatSessionParticipantIds_.contains(
-                            broadcasterID))
-                    {
-                        participantsDiffer = true;
-                        break;
-                    }
-                }
-            }
-
-            if (!participantsDiffer)
-            {
-                return;
-            }
-
-            getHelix()->fetchUsers(
-                session.participantIds, {},
-                [this, weak = this->weakFromThis()](const auto &users) {
-                    const auto self = weak.lock();
-                    if (!self)
-                    {
-                        return;
-                    }
-
-                    this->sharedChatSessionParticipants_.clear();
-                    this->sharedChatSessionParticipantIds_.clear();
-
-                    for (const auto &user : users)
-                    {
-                        if (user.id != this->roomId())
-                        {
-                            this->sharedChatSessionParticipantIds_.insert(
-                                user.id);
-                            this->sharedChatSessionParticipants_.push_back(
-                                {user.id, user.login, user.displayName});
-                        }
-                    }
-
-                    this->nextSharedChatSessionUpdateTimer_.start();
-
-                    this->sharedChatStatusChanged.invoke(
-                        this->sharedChatSessionParticipants_);
-                },
-                [] {
-                    qCWarning(chatterinoTwitch) << "Failed to get user info";
-                });
-        },
-        [](HelixGetSharedChatSessionError error, const QString &message) {
-            QString errorMessage = "Failed to get shared chat session state: ";
-
-            switch (error)
-            {
-                case HelixGetSharedChatSessionError::InvalidBroadcasterId: {
-                    errorMessage += "Invalid broadcaster ID";
-                }
-                break;
-
-                case HelixGetSharedChatSessionError::UserMissingScope: {
-                    errorMessage +=
-                        "Missing required scope. Re-login with your "
-                        "account and try again.";
-                }
-                break;
-
-                case HelixGetSharedChatSessionError::UserNotAuthorized: {
-                    errorMessage +=
-                        "you don't have permission to perform that action.";
-                }
-                break;
-
-                case HelixGetSharedChatSessionError::Unknown: {
-                    errorMessage += "Unknown error";
-                }
-                break;
-
-                case HelixGetSharedChatSessionError::Forwarded: {
-                    errorMessage += message;
-                }
-                break;
-            }
-
-            qCWarning(chatterinoTwitch) << errorMessage;
-        });
-}
-
-void TwitchChannel::refreshPinnedMessage()
-{
-    auto currentAccount = getApp()->getAccounts()->twitch.getCurrent();
-    if (!currentAccount || currentAccount->isAnon())
-    {
-        return;
-    }
-
-    const auto requestId = ++this->pinnedMessageRequestId_;
-    getHelix()->getPinnedChatMessage(
-        this->roomId(), currentAccount->getUserId(),
-        [weak = this->weakFromThis(),
-         requestId](std::optional<HelixPinnedChatMessage> msg) {
-            auto self = weak.lock();
-            if (!self || self->pinnedMessageRequestId_ != requestId)
-            {
-                return;
-            }
-            if (msg)
-            {
-                self->pinnedMessage_ =
-                    std::make_unique<const HelixPinnedChatMessage>(
-                        std::move(*msg));
-            }
-            else
-            {
-                self->pinnedMessage_ = nullptr;
-            }
-            self->pinnedMessageChanged.invoke();
-        },
-        [](const QString &error) {
-            qCWarning(chatterinoTwitch)
-                << "Failed to fetch pinned message:" << error;
-        });
-}
-
-const HelixPinnedChatMessage *TwitchChannel::getPinnedMessage() const
-{
-    return this->pinnedMessage_.get();
-}
-
-void TwitchChannel::clearPinnedMessage()
-{
-    if (!this->pinnedMessage_)
-    {
-        return;
-    }
-    this->pinnedMessage_.reset();
-    this->pinnedMessageChanged.invoke();
-}
-
-void TwitchChannel::unpinCurrentMessage()
-{
-    if (!this->pinnedMessage_)
-    {
-        return;
-    }
-
-    auto currentAccount = getApp()->getAccounts()->twitch.getCurrent();
-    if (!currentAccount || currentAccount->isAnon())
-    {
-        return;
-    }
-
-    const auto msgId = this->pinnedMessage_->messageID;
-    getHelix()->unpinChatMessage(
-        this->roomId(), currentAccount->getUserId(), msgId,
-        [weak = this->weakFromThis()] {
-            auto self = weak.lock();
-            if (!self)
-            {
-                return;
-            }
-            self->pinnedMessage_.reset();
-            self->pinnedMessageChanged.invoke();
-        },
-        [](HelixUnpinMessageError /*error*/, const QString &message) {
-            qCWarning(chatterinoTwitch)
-                << "Failed to unpin message:" << message;
-        });
 }
 
 }  // namespace chatterino

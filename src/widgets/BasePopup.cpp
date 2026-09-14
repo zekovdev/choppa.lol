@@ -11,7 +11,11 @@
 namespace chatterino {
 
 BasePopup::BasePopup(FlagsEnum<Flags> _flags, QWidget *parent)
-    : BaseWindow(_flags | Dialog, parent)
+    : BaseWindow(_flags | Dialog |
+                     (_flags.has(Frameless)
+                          ? FlagsEnum<Flags>{}
+                          : FlagsEnum<Flags>{EnableCustomFrame, ContentChrome}),
+                 parent)
 {
 }
 
