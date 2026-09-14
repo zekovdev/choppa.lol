@@ -179,10 +179,10 @@ namespace chatterino {
 
 using namespace literals;
 
-UserInfoPopup::UserInfoPopup(bool closeAutomatically, Split *split)
-    : DraggablePopup(closeAutomatically, split, {BaseWindow::ContentChrome})
+UserInfoPopup::UserInfoPopup(bool /*closeAutomatically*/, Split *split)
+    : DraggablePopup(false, split, {BaseWindow::ContentChrome})
     , split_(split)
-    , closeAutomatically_(closeAutomatically)
+    , closeAutomatically_(false)
 {
     assert(split != nullptr &&
            "split being nullptr causes lots of bugs down the road");
@@ -194,6 +194,9 @@ UserInfoPopup::UserInfoPopup(bool closeAutomatically, Split *split)
         #choppaUserCard QPushButton:hover, #choppaUserCard QPushButton:focus { background: #353535; color: white; }
         #choppaUserCard QPushButton#ban { color: #ff8391; background: #341b20; }
         #choppaUserCard QCheckBox { border: none; padding: 6px; color: #bbbbbb; }
+        #choppaUserCard QCheckBox::indicator { width: 14px; height: 14px; border: 1px solid #555555; border-radius: 4px; background: #202020; }
+        #choppaUserCard QCheckBox::indicator:checked { background: #dddddd; border-color: #dddddd; }
+        #choppaUserCard QCheckBox::indicator:hover { border-color: #eeeeee; }
         #choppaUserCard QLabel { background: transparent; border: none; color: #bbbbbb; }
     )");
 
@@ -308,7 +311,7 @@ UserInfoPopup::UserInfoPopup(bool closeAutomatically, Split *split)
     auto layout = layers.emplace<QVBoxLayout>();
     layout->setContentsMargins(12, 8, 12, 12);
     layout->setSpacing(12);
-    if (closeAutomatically || !this->hasCustomWindowFrame())
+    if (!this->hasCustomWindowFrame())
         layout->addWidget(new ChoppaTitlebar(this));
 
     // first line
@@ -709,7 +712,7 @@ UserInfoPopup::UserInfoPopup(bool closeAutomatically, Split *split)
     layout->setStretch(layout->count() - 1, 1);
 
     // size grip
-    if (closeAutomatically)
+    if (this->closeAutomatically_)
     {
         layers->addWidget(new InvisibleSizeGrip(this), 0, 0,
                           Qt::AlignRight | Qt::AlignBottom);
@@ -733,20 +736,18 @@ void UserInfoPopup::themeChangedEvent()
 void UserInfoPopup::paintEvent(QPaintEvent *)
 {
     QPainter painter(this);
-    painter.fillRect(this->rect(), QColor("#111111"));
+    painter.setRenderHint(QPainter::Antialiasing);
+    painter.setPen(QColor("#383838"));
+    painter.setBrush(QColor("#111111"));
+    painter.drawRoundedRect(QRectF(this->rect()).adjusted(0.5, 0.5, -0.5, -0.5),
+                            7, 7);
 }
 
 void UserInfoPopup::scaleChangedEvent(float /*scale*/)
 {
     this->themeChangedEvent();
 
-    QTimer::singleShot(20, this, [this] {
-        auto geo = this->geometry();
-        geo.setWidth(10);
-        geo.setHeight(10);
-
-        this->setGeometry(geo);
-    });
+    this->updateGeometry();
 }
 
 void UserInfoPopup::windowDeactivationEvent()

@@ -14,6 +14,7 @@
 #include "messages/MessageBuilder.hpp"
 #include "mocks/BaseApplication.hpp"
 #include "mocks/EmoteController.hpp"
+#include "mocks/UserData.hpp"
 #include "mocks/TwitchIrcServer.hpp"
 #include "singletons/Fonts.hpp"
 #include "singletons/CrashHandler.hpp"
@@ -24,6 +25,7 @@
 #include "Test.hpp"
 #include "widgets/ChoppaTitlebar.hpp"
 #include "widgets/dialogs/LoginDialog.hpp"
+#include "widgets/dialogs/UserInfoPopup.hpp"
 #include "widgets/dialogs/SettingsDialog.hpp"
 #include "widgets/helper/ChannelView.hpp"
 #include "widgets/helper/ChoppaModerationActions.hpp"
@@ -94,6 +96,8 @@ public:
         return &this->crashHandler;
     }
 
+    IUserDataController *getUserData() override { return &this->userData; }
+    mock::UserDataController userData;
     HotkeyController hotkeys;
     mock::MockTwitchIrcServer twitch;
     WindowManager windowManager;
@@ -591,4 +595,44 @@ TEST(ChoppaModeration, PresetsDispatchCorrectCommands)
     kick.actions().first()->menu()->actions().first()->trigger();
     EXPECT_EQ(command, "/timeout");
     EXPECT_EQ(argument, "60");
+}
+
+TEST(ChoppaNavigation, UserCardPersistsAndWindowControlsWork)
+{
+    MockApplication app;
+    Split split(nullptr);
+    QPointer<UserInfoPopup> card = new UserInfoPopup(true, &split);
+    card->show();
+    QApplication::processEvents();
+
+    QEvent deactivate(QEvent::WindowDeactivate);
+    QApplication::sendEvent(card, &deactivate);
+    QApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
+    ASSERT_FALSE(card.isNull());
+    ASSERT_EQ(card->findChildren<QWidget *>("choppaTitlebar").size(), 1);
+    const auto capture = qEnvironmentVariable("CHOPPA_MEDIA_DIRECTORY");
+    if (!capture.isEmpty())
+        EXPECT_TRUE(card->grab().save(capture + "/usercard.png"));
+    QAbstractButton *minimize = nullptr;
+    QAbstractButton *maximize = nullptr;
+    QAbstractButton *close = nullptr;
+    for (auto *button : card->findChildren<QAbstractButton *>())
+    {
+        if (button->accessibleName() == "Minimize") minimize = button;
+        if (button->accessibleName() == "Maximize / restore") maximize = button;
+        if (button->accessibleName() == "Close") close = button;
+    }
+    ASSERT_NE(minimize, nullptr);
+    ASSERT_NE(maximize, nullptr);
+    ASSERT_NE(close, nullptr);
+    maximize->click();
+    EXPECT_TRUE(card->isMaximized());
+    maximize->click();
+    EXPECT_FALSE(card->isMaximized());
+    minimize->click();
+    EXPECT_TRUE(card->isMinimized());
+    card->showNormal();
+    close->click();
+    QApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
+    EXPECT_TRUE(card.isNull());
 }
