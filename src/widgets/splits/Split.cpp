@@ -18,11 +18,11 @@
 #include "providers/twitch/TwitchChannel.hpp"
 #include "providers/twitch/TwitchIrcServer.hpp"
 #include "singletons/Fonts.hpp"
+#include "singletons/ImageUploader.hpp"
 #include "singletons/Settings.hpp"
 #include "singletons/Theme.hpp"
 #include "singletons/WindowManager.hpp"
 #include "util/CustomPlayer.hpp"
-#include "util/IncognitoBrowser.hpp"
 #include "util/MultiChannel.hpp"
 #include "util/StreamLink.hpp"
 #include "widgets/ChatterListWidget.hpp"
@@ -38,7 +38,6 @@
 #include "widgets/OverlayWindow.hpp"
 #include "widgets/Scrollbar.hpp"
 #include "widgets/splits/DraggedSplit.hpp"
-#include "widgets/splits/PinnedMessageWidget.hpp"
 #include "widgets/splits/SplitContainer.hpp"
 #include "widgets/splits/SplitHeader.hpp"
 #include "widgets/splits/SplitInput.hpp"
@@ -59,8 +58,6 @@
 
 #include <functional>
 
-using namespace Qt::Literals;
-
 namespace chatterino {
 namespace {
 void showTutorialVideo(QWidget *parent, const QString &source,
@@ -72,7 +69,7 @@ void showTutorialVideo(QWidget *parent, const QString &source,
             BaseWindow::BoundsCheckOnShow,
         },
         parent);
-    window->setWindowTitle("Chatterino - " + title);
+    window->setWindowTitle("choppa.lol - " + title);
     window->setAttribute(Qt::WA_DeleteOnClose);
     auto *layout = new QVBoxLayout();
     layout->addWidget(new QLabel(description));
@@ -95,7 +92,6 @@ Split::Split(QWidget *parent)
     , channel_(Channel::getEmpty())
     , vbox_(new QVBoxLayout(this))
     , header_(new SplitHeader(this))
-    , pinnedBanner_(new PinnedMessageWidget(this))
     , view_(new ChannelView(this, this, ChannelView::Context::None,
                             getSettings()->scrollbackSplitLimit))
     , input_(new SplitInput(this))
@@ -110,7 +106,6 @@ Split::Split(QWidget *parent)
     this->vbox_->setContentsMargins(1, 1, 1, 1);
 
     this->vbox_->addWidget(this->header_);
-    this->vbox_->addWidget(this->pinnedBanner_);
     this->vbox_->addWidget(this->view_, 1);
     this->vbox_->addWidget(this->input_);
 
@@ -241,6 +236,74 @@ Split::Split(QWidget *parent)
                                            this->focusLost.invoke();
                                        });
 
+    // this connection can be ignored since the SplitInput is owned by this Split
+    std::ignore = this->input_->ui_.textEdit->imagePasted.connect(
+        [this](const QMimeData *original) {
+            if (!getSettings()->imageUploaderEnabled)
+            {
+                return;
+            }
+
+            auto channel = this->getChannel();
+            auto *imageUploader = getApp()->getImageUploader();
+
+            auto [images, imageProcessError] =
+                imageUploader->getImages(original);
+            if (images.empty())
+            {
+                channel->addSystemMessage(
+                    QString(
+                        "An error occurred trying to process your image: %1")
+                        .arg(imageProcessError));
+                return;
+            }
+
+            if (getSettings()->askOnImageUpload.getValue())
+            {
+                QMessageBox msgBox(this->window());
+                msgBox.setWindowTitle("choppa.lol");
+                msgBox.setText("Image upload");
+                msgBox.setInformativeText(
+                    "You are uploading an image to a 3rd party service not in "
+                    "control of choppa.lol. You may not be able to "
+                    "remove the image from the site. Are you okay with this?");
+                auto *cancel = msgBox.addButton(QMessageBox::Cancel);
+                auto *yes = msgBox.addButton(QMessageBox::Yes);
+                auto *yesDontAskAgain = msgBox.addButton("Yes, don't ask again",
+                                                         QMessageBox::YesRole);
+
+                msgBox.setDefaultButton(QMessageBox::Yes);
+
+                msgBox.exec();
+
+                auto *clickedButton = msgBox.clickedButton();
+                if (clickedButton == yesDontAskAgain)
+                {
+                    getSettings()->askOnImageUpload.setValue(false);
+                }
+                else if (clickedButton == yes)
+                {
+                    // Continue with image upload
+                }
+                else if (clickedButton == cancel)
+                {
+                    // Not continuing with image upload
+                    return;
+                }
+                else
+                {
+                    // An unknown "button" was pressed - handle it as if cancel was pressed
+                    // cancel is already handled as the "escape" option, so this should never happen
+                    qCWarning(chatterinoImageuploader)
+                        << "Unhandled button pressed:" << clickedButton;
+                    return;
+                }
+            }
+
+            QPointer<ResizingTextEdit> edit = this->input_->ui_.textEdit;
+            imageUploader->upload(std::move(images), channel, edit);
+        });
+
     getSettings()->imageUploaderEnabled.connect(
         [this](const bool &val) {
             this->setAcceptDrops(val);
@@ -286,7 +349,7 @@ void Split::addShortcuts()
          [](const std::vector<QString> &) -> QString {
              auto *popup = new DebugPopup;
              popup->setAttribute(Qt::WA_DeleteOnClose);
-             popup->setWindowTitle("Chatterino - Debug popup");
+             popup->setWindowTitle("choppa.lol - Debug popup");
              popup->show();
              return "";
          }},
@@ -716,11 +779,6 @@ SplitInput &Split::getInput()
     return *this->input_;
 }
 
-PinnedMessageWidget *Split::getPinnedBanner() const
-{
-    return this->pinnedBanner_;
-}
-
 void Split::updateInputPlaceholder()
 {
     auto channel = this->getChannel();
@@ -821,15 +879,8 @@ void Split::openChannelInBrowserPlayer(ChannelPtr channel)
 {
     if (auto *twitchChannel = dynamic_cast<TwitchChannel *>(channel.get()))
     {
-        const auto playerUrl = TWITCH_PLAYER_URL.arg(twitchChannel->getName());
-        if (getSettings()->openLinksIncognito && supportsIncognitoLinks())
-        {
-            openLinkIncognito(playerUrl);
-        }
-        else
-        {
-            QDesktopServices::openUrl(QUrl(playerUrl));
-        }
+        QDesktopServices::openUrl(
+            QUrl(TWITCH_PLAYER_URL.arg(twitchChannel->getName())));
     }
 }
 
@@ -837,7 +888,7 @@ void Split::openChannelInStreamlink(const QString channelName)
 {
     try
     {
-        openStreamlinkForChannelOrUrl(channelName);
+        openStreamlinkForChannel(channelName);
     }
     catch (const Exception &ex)
     {
@@ -851,7 +902,7 @@ void Split::openChannelInCustomPlayer(const QString channelName)
     openInCustomPlayer(channelName);
 }
 
-IndirectChannel Split::getIndirectChannel() const
+IndirectChannel Split::getIndirectChannel()
 {
     return this->channel_;
 }
@@ -882,9 +933,13 @@ void Split::setChannel(IndirectChannel newChannel)
 
     this->view_->setChannel(newChannel.get());
 
+    this->usermodeChangedConnection_.disconnect();
+    this->roomModeChangedConnection_.disconnect();
     this->indirectChannelChangedConnection_.disconnect();
     this->channelSignalHolder_.clear();
 
+    TwitchChannel *tc = dynamic_cast<TwitchChannel *>(newChannel.get().get());
+    auto *kc = dynamic_cast<KickChannel *>(newChannel.get().get());
     auto *mc = dynamic_cast<MultiChannel *>(newChannel.get().get());
 
     if (mc)
@@ -892,10 +947,40 @@ void Split::setChannel(IndirectChannel newChannel)
         this->channelSignalHolder_.managedConnect(
             mc->activeChannelChanged, [this] {
                 this->updateInputPlaceholder();
-                this->updateChannelConnections();
             });
     }
-    this->updateChannelConnections();
+    else if (tc != nullptr)
+    {
+        this->usermodeChangedConnection_ = tc->userStateChanged.connect([this] {
+            this->header_->updateIcons();
+            this->header_->updateRoomModes();
+        });
+
+        this->roomModeChangedConnection_ = tc->roomModesChanged.connect([this] {
+            this->header_->updateRoomModes();
+        });
+
+        this->channelSignalHolder_.managedConnect(
+            tc->sendWaitUpdate, [this](const QString &text) {
+                this->getInput().setSendWaitStatus(text);
+            });
+    }
+    else if (kc != nullptr)
+    {
+        this->usermodeChangedConnection_ = kc->userStateChanged.connect([this] {
+            this->header_->updateIcons();
+            this->header_->updateRoomModes();
+        });
+
+        this->roomModeChangedConnection_ = kc->roomModesChanged.connect([this] {
+            this->header_->updateRoomModes();
+        });
+
+        this->channelSignalHolder_.managedConnect(
+            kc->sendWaitUpdate, [this](const QString &text) {
+                this->getInput().setSendWaitStatus(text);
+            });
+    }
 
     this->indirectChannelChangedConnection_ =
         newChannel.getChannelChanged().connect([this] {
@@ -933,71 +1018,6 @@ void Split::setChannel(IndirectChannel newChannel)
 
     // Queue up save because: Split channel changed
     getApp()->getWindows()->queueSave();
-}
-
-void Split::updateChannelConnections()
-{
-    this->usermodeChangedConnection_.disconnect();
-    this->roomModeChangedConnection_.disconnect();
-    this->sendWaitConnection_ = pajlada::Signals::ScopedConnection{};
-    this->sharedChatConnection_ = pajlada::Signals::ScopedConnection{};
-    this->getInput().setSendWaitStatus({});
-
-    auto *channel = this->channel_.get().get();
-    auto *mc = dynamic_cast<MultiChannel *>(channel);
-    if (mc)
-    {
-        if (const auto *active = mc->activeChannel())
-        {
-            channel = active->channel.get();
-        }
-    }
-
-    auto *tc = dynamic_cast<TwitchChannel *>(channel);
-    auto *kc = dynamic_cast<KickChannel *>(channel);
-    if (tc)
-    {
-        this->usermodeChangedConnection_ = tc->userStateChanged.connect([this] {
-            this->header_->updateIcons();
-            this->header_->updateRoomModes();
-        });
-
-        this->roomModeChangedConnection_ = tc->roomModesChanged.connect([this] {
-            this->header_->updateRoomModes();
-        });
-
-        this->sendWaitConnection_ =
-            tc->sendWaitUpdate.connect([this](const QString &text) {
-                this->getInput().setSendWaitStatus(text);
-            });
-
-        this->sharedChatConnection_ = tc->sharedChatStatusChanged.connect(
-            [this](const std::vector<HelixMinimalUser> &) {
-                this->header_->updateChannelText();
-            });
-        this->pinnedBanner_->setChannel(tc);
-    }
-    else if (kc != nullptr)
-    {
-        this->usermodeChangedConnection_ = kc->userStateChanged.connect([this] {
-            this->header_->updateIcons();
-            this->header_->updateRoomModes();
-        });
-
-        this->roomModeChangedConnection_ = kc->roomModesChanged.connect([this] {
-            this->header_->updateRoomModes();
-        });
-
-        this->sendWaitConnection_ =
-            kc->sendWaitUpdate.connect([this](const QString &text) {
-                this->getInput().setSendWaitStatus(text);
-            });
-        this->pinnedBanner_->setChannel(nullptr);
-    }
-    else
-    {
-        this->pinnedBanner_->setChannel(nullptr);
-    }
 }
 
 void Split::setModerationMode(bool value)
@@ -1197,7 +1217,7 @@ void Split::explainSplitting()
 void Split::popup()
 {
     auto *app = getApp();
-    Window &window = app->getWindows()->createWindow(WindowType::Popup, {});
+    Window &window = app->getWindows()->createWindow(WindowType::Popup);
 
     auto *split = new Split(window.getNotebook().getOrAddSelectedPage());
 
@@ -1278,7 +1298,7 @@ void Split::openInStreamlink()
     auto *kc = dynamic_cast<KickChannel *>(chan.get());
     if (kc)
     {
-        openStreamlinkForChannelOrUrl(kc->slug(), u"kick.com/");
+        openStreamlinkForChannel(kc->slug(), u"kick.com/");
         return;
     }
     this->openChannelInStreamlink(chan->getName());
@@ -1399,11 +1419,6 @@ void Split::reconnect()
     this->getChannel()->reconnect();
 }
 
-void Split::togglePinnedBanner()
-{
-    this->pinnedBanner_->toggleUserPinned();
-}
-
 void Split::dragEnterEvent(QDragEnterEvent *event)
 {
     if (getSettings()->imageUploaderEnabled &&
@@ -1464,65 +1479,6 @@ void Split::setInputReply(const MessagePtr &reply,
                           std::weak_ptr<Channel> channel)
 {
     this->input_->setReply(reply, std::move(channel));
-}
-
-SplitDescriptor Split::buildDescriptor() const
-{
-    SplitDescriptor descriptor;
-    descriptor.moderationMode_ = this->getModerationMode();
-    descriptor.filters_ = this->getFilters();
-    descriptor.spellCheckOverride = this->checkSpellingOverride();
-
-    auto chan = this->getIndirectChannel();
-    descriptor.type_ = qmagicenum::enumNameString(chan.getType());
-    switch (chan.getType())
-    {
-        case Channel::Type::Twitch:
-        case Channel::Type::Misc:
-            descriptor.channelName_ = chan.get()->getName();
-            break;
-
-        case Channel::Type::Kick: {
-            descriptor.channelName_ = chan.get()->getName();
-            auto *kc = dynamic_cast<KickChannel *>(chan.get().get());
-            if (kc)
-            {
-                descriptor.kickChannelID = kc->channelID();
-                descriptor.kickRoomID = kc->roomID();
-                descriptor.kickUserID = kc->userID();
-            }
-        }
-        break;
-
-        case Channel::Type::Multi: {
-            descriptor.channelName_ = chan.get()->getName();
-            auto *mc = dynamic_cast<MultiChannel *>(chan.get().get());
-            if (mc)
-            {
-                for (const auto &child : mc->channels())
-                {
-                    descriptor.children.emplace_back(child.descriptor());
-                }
-                descriptor.mcIndicator = mc->indicatorMode();
-                descriptor.mcIndex = mc->activeChannelIndex();
-            }
-        }
-        break;
-
-        case Channel::Type::TwitchWhispers:
-        case Channel::Type::TwitchWatching:
-        case Channel::Type::TwitchMentions:
-        case Channel::Type::TwitchLive:
-        case Channel::Type::TwitchAutomod:
-
-        // FIXME: Remove these (#5703)
-        case Channel::Type::None:
-        case Channel::Type::Direct:
-        case Channel::Type::TwitchEnd:
-            break;
-    }
-
-    return descriptor;
 }
 
 void Split::unpause()

@@ -80,7 +80,7 @@ void performReaction(const ToastReaction &reaction, const QString &channelName)
             QDesktopServices::openUrl(QUrl(TWITCH_PLAYER_URL.arg(channelName)));
             break;
         case ToastReaction::OpenInStreamlink: {
-            openStreamlinkForChannelOrUrl(channelName);
+            openStreamlinkForChannel(channelName);
             break;
         }
         case ToastReaction::OpenInCustomPlayer: {
@@ -288,7 +288,7 @@ void Toasts::ensureInitialized()
     this->initialized_ = true;
 
     auto *instance = WinToast::instance();
-    instance->setAppName(L"Chatterino7TV");
+    instance->setAppName(L"choppa.lol");
     instance->setAppUserModelId(Version::instance().appUserModelID());
     if (!getSettings()->createShortcutForToasts)
     {
@@ -350,7 +350,7 @@ void Toasts::ensureInitialized()
     {
         return;
     }
-    auto result = notify_init("Chatterino 7TV");
+    auto result = notify_init("choppa.lol");
 
     if (result == 0)
     {

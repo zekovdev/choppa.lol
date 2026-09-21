@@ -34,9 +34,6 @@ public:
     WindowType getType();
     SplitNotebook &getNotebook();
 
-    void setPopupID(size_t id);
-    std::optional<size_t> popupID() const;
-
     pajlada::Signals::NoArgSignal closed;
 
 protected:
@@ -45,7 +42,6 @@ protected:
     void themeChangedEvent() override;
 
 private:
-    void addCustomTitlebarButtons();
     void addDebugStuff(
         std::map<QString, std::function<QString(std::vector<QString>)>>
             &actions);
@@ -57,16 +53,9 @@ private:
     WindowType type_;
 
     SplitNotebook *notebook_;
-    LabelButton *userLabel_ = nullptr;
     std::shared_ptr<UpdateDialog> updateDialogHandle_;
 
     pajlada::Signals::SignalHolder signalHolder_;
-
-    // this is only used on Windows and only on the main window, for the one used otherwise, see SplitNotebook in Notebook.hpp
-    PixmapButton *streamerModeTitlebarIcon_ = nullptr;
-    void updateStreamerModeIcon();
-
-    std::optional<size_t> popupID_;
 
     friend class Notebook;
 };

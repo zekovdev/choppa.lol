@@ -27,11 +27,16 @@
 #include "widgets/settingspages/NotificationPage.hpp"
 #include "widgets/settingspages/PluginsPage.hpp"
 
+#include <QApplication>
+#include <QCloseEvent>
 #include <QDialogButtonBox>
+#include <QFile>
+#include <QLabel>
 #include <QLineEdit>
 #include <QPointer>
+#include <QTimer>
 
-using namespace Qt::Literals;
+#include <algorithm>
 
 namespace chatterino {
 
@@ -39,26 +44,49 @@ SettingsDialog::SettingsDialog(QWidget *parent)
     : BaseWindow(
           {
               BaseWindow::Flags::DisableCustomScaling,
+              BaseWindow::EnableCustomFrame,
+              BaseWindow::ContentChrome,
               BaseWindow::Flags::Dialog,
               BaseWindow::DisableLayoutSave,
               BaseWindow::BoundsCheckOnShow,
-              BaseWindow::UseSettingsStylesheet,
           },
           parent)
 {
     this->setObjectName("SettingsDialog");
-    this->setWindowTitle("Chatterino Settings");
-    this->setWindowRole(u"chatterino.settings"_s);
+    this->setWindowTitle("Settings");
     // Disable the ? button in the titlebar until we decide to use it
     this->setWindowFlags(this->windowFlags() &
                          ~Qt::WindowContextHelpButtonHint);
 
-    this->resize(915, 600);
+    this->resize(860, 640);
+    this->setMinimumSize(720, 480);
+    this->themeChangedEvent();
+    QFile styleFile(":/qss/settings.qss");
+    if (!styleFile.open(QFile::ReadOnly))
+    {
+        assert(false && "Resources not loaded");
+        qCWarning(chatterinoWidget) << "Resources not loaded";
+    }
+    QString stylesheet = QString::fromUtf8(styleFile.readAll());
+    this->setStyleSheet(stylesheet);
 
     this->initUi();
     this->addTabs();
+    this->overrideBackgroundColor_ = QColor("#111111");
 
     this->addShortcuts();
+    qApp->installEventFilter(this);
+    this->signalHolder_.managedConnect(getSettings()->snapshotChanged, [this] {
+        this->queueStateUpdate();
+    });
+    this->signalHolder_.managedConnect(
+        getApp()->getCommands()->items.itemInserted, [this](const auto &) {
+            this->queueStateUpdate();
+        });
+    this->signalHolder_.managedConnect(
+        getApp()->getCommands()->items.itemRemoved, [this](const auto &) {
+            this->queueStateUpdate();
+        });
     this->signalHolder_.managedConnect(getApp()->getHotkeys()->onItemsUpdated,
                                        [this]() {
                                            this->clearShortcuts();
@@ -102,6 +130,8 @@ void SettingsDialog::setSearchPlaceholderText()
 
 void SettingsDialog::initUi()
 {
+    this->getLayoutContainer()->setObjectName("settingsSurface");
+    this->getLayoutContainer()->setAttribute(Qt::WA_StyledBackground, true);
     auto outerBox = LayoutCreator<QWidget>(this->getLayoutContainer())
                         .setLayoutType<QVBoxLayout>()
                         .withoutSpacing();
@@ -122,33 +152,50 @@ void SettingsDialog::initUi()
     QObject::connect(edit.getElement(), &QLineEdit::textChanged, this,
                      &SettingsDialog::filterElements);
 
-    // CENTER
-    auto centerBox =
-        outerBox.emplace<QHBoxLayout>().withoutMargin().withoutSpacing();
-
-    // left side (tabs)
-    centerBox.emplace<QWidget>()
+    // Compact category grid keeps the full width available to settings.
+    outerBox.emplace<QWidget>()
         .assign(&this->ui_.tabContainerContainer)
-        .setLayoutType<QVBoxLayout>()
+        .setLayoutType<QGridLayout>()
         .withoutMargin()
         .assign(&this->ui_.tabContainer);
-    this->ui_.tabContainerContainer->setFixedWidth(
-        static_cast<int>(150 * this->dpi_));
-
-    // right side (pages)
-    centerBox.emplace<QStackedLayout>()
+    this->ui_.pageTitle = new QLabel;
+    this->ui_.pageTitle->setObjectName("settingsPageTitle");
+    outerBox->addWidget(this->ui_.pageTitle);
+    outerBox.emplace<QStackedLayout>()
         .assign(&this->ui_.pageStack)
         .withoutMargin();
+    this->ui_.emptySearch =
+        new QLabel(tr("No matching settings. Try another search."));
+    this->ui_.emptySearch->setAlignment(Qt::AlignCenter);
+    this->ui_.pageStack->addWidget(this->ui_.emptySearch);
+    outerBox->setStretch(3, 1);
 
     this->ui_.pageStack->setContentsMargins(0, 0, 0, 0);
 
-    outerBox->addSpacing(12);
+    outerBox->addSpacing(8);
 
     // BOTTOM
+    this->ui_.status = new QLabel;
+    this->ui_.status->setObjectName("settingsSaveStatus");
+    this->ui_.status->setWordWrap(true);
+    outerBox->addWidget(this->ui_.status);
     auto buttons = outerBox.emplace<QDialogButtonBox>(Qt::Horizontal);
+    this->ui_.discardButton = buttons->addButton(
+        "Discard changes", QDialogButtonBox::DestructiveRole);
+    this->ui_.discardButton->hide();
+    connect(this->ui_.discardButton, &QPushButton::clicked, this, [this] {
+        getSettings()->restoreSnapshot();
+        auto &commands = getApp()->getCommands()->items;
+        while (!commands.raw().empty())
+            commands.removeAt(commands.raw().size() - 1);
+        for (const auto &command : this->commandSnapshot_)
+            commands.append(command);
+        this->saveOnClose_ = true;
+        this->close();
+    });
     {
         this->ui_.okButton =
-            buttons->addButton("Ok", QDialogButtonBox::YesRole);
+            buttons->addButton("Save changes", QDialogButtonBox::YesRole);
         this->ui_.cancelButton =
             buttons->addButton("Cancel", QDialogButtonBox::NoRole);
     }
@@ -174,36 +221,21 @@ void SettingsDialog::filterElements(const QString &text)
     }
 
     // find next visible page
-    if (this->lastSelectedByUser_ && this->lastSelectedByUser_->isVisible())
+    if (this->lastSelectedByUser_ && !this->lastSelectedByUser_->isHidden())
     {
         this->selectTab(this->lastSelectedByUser_, false);
     }
-    else if (!this->selectedTab_->isVisible())
+    else if (!this->selectedTab_ || this->selectedTab_->isHidden())
     {
+        this->ui_.pageStack->setCurrentWidget(this->ui_.emptySearch);
+        this->ui_.pageTitle->setText(tr("Search results"));
         for (auto &&tab : this->tabs_)
         {
-            if (tab->isVisible())
+            if (!tab->isHidden())
             {
                 this->selectTab(tab, false);
                 break;
             }
-        }
-    }
-
-    // remove duplicate spaces
-    bool shouldShowSpace = false;
-
-    for (int i = 0; i < this->ui_.tabContainer->count(); i++)
-    {
-        auto *item = this->ui_.tabContainer->itemAt(i);
-        if (auto *x = dynamic_cast<QSpacerItem *>(item); x)
-        {
-            x->changeSize(10, shouldShowSpace ? 16 : 0);
-            shouldShowSpace = false;
-        }
-        else if (item->widget())
-        {
-            shouldShowSpace |= item->widget()->isVisible();
         }
     }
 }
@@ -225,27 +257,31 @@ bool SettingsDialog::eventFilter(QObject *object, QEvent *event)
             return true;
         }
     }
+    if (auto *widget = qobject_cast<QWidget *>(object);
+        widget && widget->window() == this &&
+        (event->type() == QEvent::KeyRelease ||
+         event->type() == QEvent::FocusOut))
+        this->queueStateUpdate();
     return false;
 }
 
 void SettingsDialog::addTabs()
 {
-    this->ui_.tabContainer->setSpacing(0);
-    this->ui_.tabContainer->setContentsMargins(0, 20, 0, 20);
+    this->ui_.tabContainer->setSpacing(4);
+    this->ui_.tabContainer->setContentsMargins(0, 0, 0, 8);
+    for (int column = 0; column < 7; ++column)
+        this->ui_.tabContainer->setColumnStretch(column, 1);
 
     // Constructors are wrapped in std::function to remove some strain from first time loading.
 
     // clang-format off
     this->addTab([]{return new GeneralPage;},          "General",        ":/settings/about.svg", SettingsTabId::General);
-    this->ui_.tabContainer->addSpacing(16);
     this->addTab([]{return new AccountsPage;},         "Accounts",       ":/settings/accounts.svg", SettingsTabId::Accounts);
     this->addTab([]{return new NicknamesPage;},        "Nicknames",      ":/settings/accounts.svg");
-    this->ui_.tabContainer->addSpacing(16);
     this->addTab([]{return new CommandPage;},          "Commands",       ":/settings/commands.svg");
     this->addTab([]{return new HighlightingPage;},     "Highlights",     ":/settings/notifications.svg", SettingsTabId::Highlights);
     this->addTab([]{return new IgnoresPage;},          "Ignores",        ":/settings/ignore.svg");
     this->addTab([]{return new FiltersPage;},          "Filters",        ":/settings/filters.svg");
-    this->ui_.tabContainer->addSpacing(16);
     this->addTab([]{return new KeyboardSettingsPage;}, "Hotkeys",        ":/settings/keybinds.svg");
     this->addTab([]{return new ModerationPage;},       "Moderation",     ":/settings/moderation.svg", SettingsTabId::Moderation);
     this->addTab([]{return new NotificationPage;},     "Live Notifications",  ":/settings/notification2.svg");
@@ -253,7 +289,6 @@ void SettingsDialog::addTabs()
 #ifdef CHATTERINO_HAVE_PLUGINS
     this->addTab([]{return new PluginsPage;},          "Plugins",        ":/settings/plugins.svg");
 #endif
-    this->ui_.tabContainer->addStretch(1);
     this->addTab([]{return new AboutPage;},            "About",          ":/settings/about.svg", SettingsTabId::About, Qt::AlignBottom);
     // clang-format on
 }
@@ -266,7 +301,9 @@ void SettingsDialog::addTab(std::function<SettingsPage *()> page,
         new SettingsDialogTab(this, std::move(page), name, iconPath, id);
     tab->setFixedHeight(static_cast<int>(30 * this->dpi_));
 
-    this->ui_.tabContainer->addWidget(tab, 0, alignment);
+    (void)alignment;
+    const int index = static_cast<int>(this->tabs_.size());
+    this->ui_.tabContainer->addWidget(tab, index / 7, index % 7);
     this->tabs_.push_back(tab);
 
     if (this->tabs_.size() == 1)
@@ -291,17 +328,17 @@ void SettingsDialog::selectTab(SettingsDialogTab *tab, bool byUser)
     }();
 
     this->ui_.pageStack->setCurrentWidget(tab->page());
+    this->ui_.pageTitle->setText(tab->name());
 
     if (this->selectedTab_ != nullptr)
     {
         this->selectedTab_->setSelected(false);
-        this->selectedTab_->setStyleSheet("color: #FFF");
+        this->selectedTab_->setStyleSheet("color: #999999");
     }
 
     tab->setSelected(true);
-    tab->setStyleSheet(
-        "background: #222; color: #4FC3F7;"  // Should this be same as accent color?
-        "/*border: 1px solid #555; border-right: none;*/");
+    tab->setStyleSheet("background: #111111; color: #ffffff;"
+                       "/*border: 1px solid #555; border-right: none;*/");
     this->selectedTab_ = tab;
     if (byUser)
     {
@@ -339,17 +376,14 @@ void SettingsDialog::showDialog(QWidget *parent,
                                 SettingsDialogPreference preferredTab)
 {
     static QPointer<SettingsDialog> instance;
-    if (instance)
+    if (!instance)
+        instance = new SettingsDialog(parent);
+    if (!instance->isVisible())
     {
         instance->refresh();
+        getSettings()->saveSnapshot();
+        instance->commandSnapshot_ = getApp()->getCommands()->items.raw();
     }
-    else
-    {
-        instance = new SettingsDialog(parent);
-    }
-
-    // Resets the cancel button.
-    getSettings()->saveSnapshot();
 
     switch (preferredTab)
     {
@@ -386,11 +420,6 @@ void SettingsDialog::showDialog(QWidget *parent,
     }
 
     instance->show();
-    if (preferredTab == SettingsDialogPreference::StreamerMode)
-    {
-        // this is needed because each time the settings are opened, the query is reset
-        instance->setElementFilter("Streamer Mode");
-    }
     instance->activateWindow();
     instance->raise();
     instance->setFocus();
@@ -401,7 +430,8 @@ void SettingsDialog::refresh()
     // Updates tabs.
     for (auto *tab : this->tabs_)
     {
-        tab->page()->onShow();
+        if (auto *page = tab->createdPage())
+            page->onShow();
     }
 }
 
@@ -415,37 +445,141 @@ void SettingsDialog::scaleChangedEvent(float newScale)
     {
         tab->setFixedHeight(30);
     }
+}
 
-    if (this->ui_.tabContainerContainer)
-    {
-        this->ui_.tabContainerContainer->setFixedWidth(150);
-    }
+void SettingsDialog::themeChangedEvent()
+{
+    BaseWindow::themeChangedEvent();
+
+    QPalette palette;
+    palette.setColor(QPalette::Window, QColor("#111"));
+    this->setPalette(palette);
 }
 
 void SettingsDialog::showEvent(QShowEvent *e)
 {
+    this->saveOnClose_ = false;
+    this->saved_ = false;
+    this->saveFailed_ = false;
+    this->ui_.discardButton->hide();
+    this->updateState();
     this->ui_.search->setText("");
     BaseWindow::showEvent(e);
 }
 
-///// Widget creation helpers
+bool SettingsDialog::hasChanges() const
+{
+    const auto &commands = getApp()->getCommands()->items.raw();
+    return getSettings()->hasSnapshotChanges() ||
+           !std::equal(
+               commands.begin(), commands.end(), this->commandSnapshot_.begin(),
+               this->commandSnapshot_.end(),
+               [](const Command &a, const Command &b) {
+                   return a.name == b.name && a.func == b.func &&
+                          a.showInMsgContextMenu == b.showInMsgContextMenu;
+               });
+}
+
+bool SettingsDialog::hasInvalidInput() const
+{
+    for (auto *edit : this->findChildren<QLineEdit *>())
+        if (edit != this->ui_.search && edit->isVisible() &&
+            edit->isEnabled() && edit->validator() &&
+            !edit->hasAcceptableInput())
+            return true;
+    return false;
+}
+
+void SettingsDialog::queueStateUpdate()
+{
+    if (!this->isVisible() || this->stateUpdatePending_)
+        return;
+    this->stateUpdatePending_ = true;
+    QTimer::singleShot(0, this, [this] {
+        this->stateUpdatePending_ = false;
+        this->updateState();
+    });
+}
+
+void SettingsDialog::updateState()
+{
+    const bool modified = this->hasChanges();
+    const bool invalid = this->hasInvalidInput();
+    this->ui_.okButton->setEnabled(!invalid &&
+                                   getSettings()->isSavingEnabled());
+    this->ui_.okButton->setToolTip(
+        invalid ? tr("Correct the invalid value before saving.")
+        : !getSettings()->isSavingEnabled()
+            ? tr("Saving is disabled for this session.")
+            : QString());
+    this->ui_.cancelButton->setText(modified ? tr("Cancel") : tr("Close"));
+    if (invalid)
+        this->ui_.status->setText(
+            tr("A value is invalid. Correct it before saving."));
+    else if (!getSettings()->isSavingEnabled())
+        this->ui_.status->setText(tr("Saving is disabled for this session."));
+    else if (this->saveFailed_)
+        return;
+    else if (modified)
+        this->ui_.status->setText(tr("Unsaved changes"));
+    else
+        this->ui_.status->setText(this->saved_ ? tr("Saved")
+                                               : tr("No changes"));
+}
+
 void SettingsDialog::onOkClicked()
 {
-    if (!getApp()->getArgs().dontSaveSettings)
+    if (this->hasInvalidInput() || !getSettings()->isSavingEnabled())
     {
-        getApp()->getCommands()->save();
+        this->updateState();
+        return;
     }
-
-    getSettings()->requestSave();
-
-    this->close();
+    this->ui_.status->setText(tr("Saving…"));
+    this->ui_.okButton->setEnabled(false);
+    using Result = pajlada::Settings::SettingManager::SaveResult;
+    const auto commands = getApp()->getCommands()->save();
+    const auto settings = getSettings()->requestSave();
+    if (commands == Result::Failed || settings == Result::Failed)
+    {
+        this->saveFailed_ = true;
+        this->ui_.status->setText(
+            tr("Some changes could not be saved. Check disk space and folder "
+               "permissions, then retry Save changes."));
+        this->ui_.okButton->setEnabled(true);
+        return;
+    }
+    this->saveFailed_ = false;
+    this->saved_ = true;
+    getSettings()->saveSnapshot();
+    this->commandSnapshot_ = getApp()->getCommands()->items.raw();
+    this->ui_.discardButton->hide();
+    this->updateState();
 }
 
 void SettingsDialog::onCancelClicked()
 {
-    getSettings()->restoreSnapshot();
-
     this->close();
+}
+
+void SettingsDialog::closeEvent(QCloseEvent *event)
+{
+    if (!this->saveOnClose_ && this->hasChanges())
+    {
+        event->ignore();
+        this->ui_.status->setText(tr(
+            "Unsaved changes. Save them or choose Discard changes to close."));
+        this->ui_.discardButton->show();
+        return;
+    }
+    BaseWindow::closeEvent(event);
+}
+
+void SettingsDialog::keyPressEvent(QKeyEvent *event)
+{
+    if (event->key() == Qt::Key_Escape)
+        this->onCancelClicked();
+    else
+        BaseWindow::keyPressEvent(event);
 }
 
 }  // namespace chatterino

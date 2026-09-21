@@ -42,6 +42,11 @@ QString formatModsError(HelixGetModeratorsError error, const QString &message)
         }
         break;
 
+        case Error::Ratelimited: {
+            errorMessage +=
+                "Twitch is limiting requests. Try again in a minute.";
+        }
+        break;
         case Error::Unknown: {
             errorMessage += "An unknown error has occurred.";
         }
@@ -69,7 +74,7 @@ QString getModerators(const CommandContext &ctx)
     }
 
     getHelix()->getModerators(
-        ctx.twitchChannel->roomId(), 500, nullptr,
+        ctx.twitchChannel->roomId(), 500,
         [channel{ctx.channel}, twitchChannel{ctx.twitchChannel}](auto result) {
             if (result.empty())
             {

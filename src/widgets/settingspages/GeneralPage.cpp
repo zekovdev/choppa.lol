@@ -9,7 +9,6 @@
 #include "common/Version.hpp"
 #include "controllers/hotkeys/HotkeyCategory.hpp"
 #include "controllers/hotkeys/HotkeyController.hpp"
-#include "providers/recentmessages/Api.hpp"
 #include "providers/twitch/TwitchChannel.hpp"
 #include "providers/twitch/TwitchIrcServer.hpp"
 #include "singletons/CrashHandler.hpp"
@@ -100,7 +99,9 @@ namespace chatterino {
 GeneralPage::GeneralPage()
 {
     auto *y = new QVBoxLayout;
+    y->setContentsMargins(0, 0, 0, 0);
     auto *x = new QHBoxLayout;
+    x->setContentsMargins(14, 6, 14, 6);
     auto *view = GeneralPageView::withNavigation(this);
     this->view_ = view;
     x->addWidget(view);
@@ -238,10 +239,6 @@ void GeneralPage::initLayout(GeneralPageView &layout)
         false, "Choose which tabs are visible in the notebook");
 
     SettingWidget::dropdown("Tab style", s.tabStyle)->addTo(layout);
-    SettingWidget::checkbox("Extend wrapped tabs", s.growWrappedNotebookLines)
-        ->setTooltip("When horizontal tabs are wrapped, extend the line for "
-                     "the whole width of the window.")
-        ->addTo(layout);
 
     layout.addWidget(new FontSettingWidget(s.chatFontFamily, s.chatFontSize,
                                            s.chatFontWeight),
@@ -508,6 +505,13 @@ void GeneralPage::initLayout(GeneralPageView &layout)
                      "message to help better tell them apart.")
         ->addTo(layout);
 
+    SettingWidget::checkbox("7TV styled highlights", s.seventvStyledHighlights)
+        ->setTooltip("Render mentions, subscriptions, first messages, "
+                     "highlights and announcements with a subtle tinted "
+                     "background, colored side borders and a small label in "
+                     "the top-right corner.")
+        ->addTo(layout);
+
     SettingWidget::checkbox("Reduce opacity of message history",
                             s.fadeMessageHistory)
         ->setTooltip(
@@ -522,11 +526,6 @@ void GeneralPage::initLayout(GeneralPageView &layout)
 
     SettingWidget::checkbox("Hide message timestamps when channel is live",
                             s.hideMessageTimestampsWhenLive)
-        ->addTo(layout);
-
-    SettingWidget::checkbox("Correct ASCII art wrapping", s.wrapAsciiArt)
-        ->setTooltip("Limit the width of messages containing ASCII art to "
-                     "match the width of Twitch web chat.")
         ->addTo(layout);
 
     layout.addDropdown<QString>(
@@ -547,26 +546,6 @@ void GeneralPage::initLayout(GeneralPageView &layout)
                                    : args.value;
         },
         true, "a = am/pm, zzz = milliseconds");
-
-    SettingWidget::checkbox("Show header timestamps", s.showHeaderTimestamps)
-        ->addTo(layout);
-
-    SettingWidget::checkbox("Show announcement header",
-                            s.showAnnouncementHeader)
-        ->addTo(layout);
-
-    SettingWidget::checkbox("Show subscription header",
-                            s.showSubscriptionHeader)
-        ->addTo(layout);
-
-    SettingWidget::checkbox("Show watch streak header", s.showWatchStreakHeader)
-        ->addTo(layout);
-
-    SettingWidget::checkbox("Show Twitch GIFs", s.showTwitchGifs)
-        ->setTooltip("Twitch GIFs will be shown inline. When disabled, they're "
-                     "shown as links.")
-        ->addTo(layout);
-
     layout.addDropdown<int>(
         "Limit message height",
         {"Never", "2 lines", "3 lines", "4 lines", "5 lines"},
@@ -632,6 +611,26 @@ void GeneralPage::initLayout(GeneralPageView &layout)
 
     SettingWidget::checkbox("Use experimental smarter emote completion.",
                             s.useSmartEmoteCompletion)
+        ->addTo(layout);
+
+    SettingWidget::checkbox("Tab opens an emote wheel above the input box",
+                            s.tabEmoteWheel)
+        ->setTooltip(
+            "Pressing Tab on a partial word shows a horizontal strip of "
+            "matching emotes above the input box with a live preview in the "
+            "text. Tab/arrow keys cycle through the matches, Space/Enter "
+            "keep the selection, Escape restores the typed word. When "
+            "disabled (or when nothing matches), the classic inline tab "
+            "completion is used.")
+        ->addTo(layout);
+
+    SettingWidget::checkbox("Show emotes inline in the message input box",
+                            s.inlineEmotesInInput)
+        ->setTooltip(
+            "Render emotes and emoji as images inside the message input box "
+            "while typing. Typing an emote name followed by a space, "
+            "completing an emote, or typing :name: converts it to an image; "
+            "Backspace turns it back into text.")
         ->addTo(layout);
 
     layout.addDropdown<float>(
@@ -747,70 +746,6 @@ void GeneralPage::initLayout(GeneralPageView &layout)
                      "paints, and personal emotes. When disabled, no activity "
                      "is sent and others won't see your cosmetics.")
         ->addKeywords({"seventv"})
-        ->addTo(layout);
-
-    layout.addTitle("Streamer Mode");
-    layout.addDescription(
-        "Chatterino can automatically change behavior if it detects that any "
-        "streaming software is running.\nSelect which things you want to "
-        "change while streaming");
-
-    SettingWidget::dropdown("Enable Streamer Mode", s.enableStreamerMode)
-        ->addTo(layout);
-
-    SettingWidget::checkbox("Hide usercard avatars",
-                            s.streamerModeHideUsercardAvatars)
-        ->setTooltip("Prevent potentially explicit avatars from showing.")
-        ->addTo(layout);
-
-    SettingWidget::checkbox("Hide link thumbnails",
-                            s.streamerModeHideLinkThumbnails)
-        ->setTooltip("Prevent potentially explicit thumbnails from showing "
-                     "when hovering links.")
-        ->addTo(layout);
-
-    SettingWidget::checkbox(
-        "Hide viewer count and stream length while hovering over split header",
-        s.streamerModeHideViewerCountAndDuration)
-        ->addTo(layout);
-
-    SettingWidget::checkbox("Hide moderation actions",
-                            s.streamerModeHideModActions)
-        ->setTooltip(
-            "Hide bans, timeouts, and automod messages from appearing in chat.")
-        ->addTo(layout);
-
-    SettingWidget::checkbox("Hide messages from restricted users",
-                            s.streamerModeHideRestrictedUsers)
-        ->setTooltip("Restricted users can be marked by you, your moderators, "
-                     "or Twitch's AutoMod")
-        ->addTo(layout);
-
-    SettingWidget::checkbox("Hide blocked terms",
-                            s.streamerModeHideBlockedTermText)
-        ->setTooltip(
-            "Hide blocked terms from showing up in places like AutoMod "
-            "messages. This can be useful in case you have some blocked terms "
-            "that you don't want to show on stream.")
-        ->addTo(layout);
-
-    SettingWidget::checkbox("Hide user notes", s.streamerModeHideUserNotes)
-        ->setTooltip("Hide user notes from showing in usercards.")
-        ->addTo(layout);
-
-    SettingWidget::checkbox("Mute mention sounds", s.streamerModeMuteMentions)
-        ->setTooltip("Mute your ping sound from playing.")
-        ->addTo(layout);
-
-    SettingWidget::checkbox("Suppress Live Notifications",
-                            s.streamerModeSuppressLiveNotifications)
-        ->setTooltip(
-            "Hide Live notification popups from appearing. (Windows Only)")
-        ->addTo(layout);
-
-    SettingWidget::checkbox("Suppress Inline Whispers",
-                            s.streamerModeSuppressInlineWhispers)
-        ->setTooltip("Hide whispers sent to you from appearing in chat.")
         ->addTo(layout);
 
     layout.addTitle("Link Previews");
@@ -976,7 +911,7 @@ void GeneralPage::initLayout(GeneralPageView &layout)
             "Using multiple extension IDs from different browsers may cause "
             "issues.");
         note->setWordWrap(true);
-        note->setStyleSheet("color: #bbb");
+        note->setStyleSheet("color: #8a8a93");
 
         layout.addWidget(note);
 
@@ -999,7 +934,7 @@ void GeneralPage::initLayout(GeneralPageView &layout)
 #    endif
         );
         note->setWordWrap(true);
-        note->setStyleSheet("color: #bbb");
+        note->setStyleSheet("color: #8a8a93");
         layout.addWidget(note);
 
         auto *form = new QFormLayout();
@@ -1108,11 +1043,11 @@ void GeneralPage::initLayout(GeneralPageView &layout)
         ->setTooltip("Show the stream title")
         ->addTo(layout);
 
-    layout.addSubtitle("Unique chat (R9K)");
+    layout.addSubtitle("R9K");
     auto toggleLocalr9kSeq = getApp()->getHotkeys()->getDisplaySequence(
         HotkeyCategory::Window, "toggleLocalR9K");
     QString toggleLocalr9kShortcut =
-        "an assigned hotkey (Window -> Toggle local unique chat (R9K))";
+        "an assigned hotkey (Window -> Toggle local R9K)";
     if (!toggleLocalr9kSeq.isEmpty())
     {
         toggleLocalr9kShortcut = toggleLocalr9kSeq.toString(
@@ -1405,6 +1340,16 @@ void GeneralPage::initLayout(GeneralPageView &layout)
         ->setTooltip("When possible, restart Chatterino if the program crashes")
         ->addTo(layout);
 
+#if defined(Q_OS_LINUX) && !defined(NO_QTKEYCHAIN)
+    if (!getApp()->getPaths().isPortable())
+    {
+        SettingWidget::checkbox(
+            "Use libsecret/KWallet/Gnome keychain to secure passwords",
+            s.useKeyring)
+            ->addTo(layout);
+    }
+#endif
+
     SettingWidget::checkbox("Show 7TV Animated Profile Picture",
                             s.displaySevenTVAnimatedProfile)
         ->addTo(layout);
@@ -1459,13 +1404,6 @@ void GeneralPage::initLayout(GeneralPageView &layout)
     SettingWidget::checkbox(
         "Automatically close reply thread popup when it loses focus",
         s.autoCloseThreadPopup)
-        ->addTo(layout);
-
-    SettingWidget::checkbox("Always show pinned channel message",
-                            s.alwaysShowPinnedMessage)
-        ->setTooltip(
-            "When enabled, pinned messages will stay visible instead of "
-            "automatically hiding after a few seconds.")
         ->addTo(layout);
 
     SettingWidget::checkbox("Display 7TV Paints", s.displaySevenTVPaints)
@@ -1573,10 +1511,7 @@ void GeneralPage::initLayout(GeneralPageView &layout)
         s.linksDoubleClickOnly)
         ->setTooltip("When enabled, opening links/usercards requires "
                      "double-clicking.\nUseful for making sure you don't "
-                     "accidentally click on suspicious links.\nClicking a link "
-                     "once will pause the chat briefly to allow for a less "
-                     "accident-prone double-clicking.")
-        ->addKeywords({"pause"})
+                     "accidentally click on suspicious links.")
         ->addTo(layout);
 
     SettingWidget::checkbox("Unshorten links", s.unshortLinks)
@@ -1621,13 +1556,6 @@ void GeneralPage::initLayout(GeneralPageView &layout)
 
     SettingWidget::checkbox("Load message history on connect",
                             s.loadTwitchMessageHistoryOnConnect)
-        ->addTo(layout);
-
-    SettingWidget::lineEdit("Message history URL", s.messageHistoryUrl,
-                            recentmessages::DEFAULT_API_URL.toString())
-        ->setTooltip(
-            "Use %1 where the channel name should be inserted, for example: " +
-            recentmessages::DEFAULT_API_URL.toString())
         ->addTo(layout);
 
     // TODO: Change phrasing to use better english once we can tag settings, right now it's kept as history instead of historical so that the setting shows up when the user searches for history
@@ -1709,46 +1637,6 @@ void GeneralPage::initLayout(GeneralPageView &layout)
                             s.disableTabRenamingOnClick)
         ->setTooltip("Prevents the rename dialog from opening when a tab is "
                      "double-clicked")
-        ->addTo(layout);
-
-    SettingWidget::intInput(
-        "Shared chat session status refresh interval",
-        s.sharedChatSessionRefreshInterval,
-        {.min = 5, .max = 999, .singleStep = 1, .suffix = "s"})
-        ->setTooltip("How often Chatterino polls the Twitch API for the "
-                     "shared chat session status.")
-        ->addTo(layout);
-
-    SettingWidget::checkbox("Show shared chat badge for all messages",
-                            s.sharedChatAlwaysShowBadge)
-        ->setTooltip(
-            "If turned off, only messages from other participants have a "
-            "shared chat badge")
-        ->addTo(layout);
-
-    SettingWidget::dropdown("Twitch read connection mode (requires restart)",
-                            s.twitchReadConnectionMode)
-        ->setTooltip("The read connection is the one where Chatterino joins a "
-                     "channel and listens to the messages.\n"
-                     "- Authenticated: Join as your logged in user.\n"
-                     "- Anonymous: Join as an anonymous user. This causes to "
-                     "you not show up in the viewer list.\n"
-                     "- Anonymous (parallel): Join as an anonymous user on "
-                     "multiple connections at once. This speeds up the "
-                     "connection phase when joining many channels. The other "
-                     "modes will join in delayed batches.")
-        ->addTo(layout);
-
-    SettingWidget::dropdown("Kick connection preference (requires restart)",
-                            s.kickConnectionPreference)
-        ->setTooltip("The transport to use for receiving Kick messages.\n"
-                     "- Default: Use Pusher.\n"
-                     "- Pusher: Use Kick's Pusher app. This was historically "
-                     "the default, but the web app has moved on.\n"
-                     "- Centrifugo: Use Kick's centrifugo instance. This is "
-                     "usually used by default on the web.\n"
-                     "- Any: Advertise support for both Pusher and Centrifugo. "
-                     "This matches the behaviour on the web.\n")
         ->addTo(layout);
 
     layout.addStretch();

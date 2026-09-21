@@ -64,8 +64,8 @@ void checkWebp()
     if (!messages.empty())
     {
         QMessageBox::warning(
-            nullptr, u"Chatterino - Sanity Check"_s,
-            u"Your Chatterino instance is not able to load WEBP files.\nMake "
+            nullptr, u"choppa.lol - System check"_s,
+            u"choppa.lol is not able to load WEBP files.\nMake "
             u"sure you have qtimageformats installed.\n\n" %
                 messages.join(u"\n\n"));
     }

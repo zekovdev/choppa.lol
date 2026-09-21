@@ -4,10 +4,12 @@
 
 #pragma once
 
+#include "controllers/commands/Command.hpp"
 #include "widgets/BaseWindow.hpp"
 
 #include <pajlada/settings/setting.hpp>
 #include <QFrame>
+#include <QGridLayout>
 #include <QPushButton>
 #include <QStackedLayout>
 #include <QVBoxLayout>
@@ -16,6 +18,7 @@
 #include <functional>
 
 class QLineEdit;
+class QLabel;
 
 namespace chatterino {
 
@@ -49,7 +52,10 @@ public:
 
 protected:
     void scaleChangedEvent(float newDpi) override;
+    void themeChangedEvent() override;
     void showEvent(QShowEvent *) override;
+    void closeEvent(QCloseEvent *event) override;
+    void keyPressEvent(QKeyEvent *event) override;
 
 private:
     void refresh();
@@ -67,13 +73,21 @@ private:
     bool eventFilter(QObject *object, QEvent *event) override;
 
     void onOkClicked();
+    void queueStateUpdate();
+    void updateState();
+    bool hasChanges() const;
+    bool hasInvalidInput() const;
     void onCancelClicked();
     void addShortcuts() override;
     void setSearchPlaceholderText();
 
     struct {
         QWidget *tabContainerContainer{};
-        QVBoxLayout *tabContainer{};
+        QGridLayout *tabContainer{};
+        QLabel *pageTitle{};
+        QLabel *emptySearch{};
+        QLabel *status{};
+        QPushButton *discardButton{};
         QStackedLayout *pageStack{};
         QPushButton *okButton{};
         QPushButton *cancelButton{};
@@ -83,6 +97,11 @@ private:
     SettingsDialogTab *selectedTab_{};
     SettingsDialogTab *lastSelectedByUser_{};
     float dpi_ = 1.0F;
+    bool saveOnClose_ = false;
+    bool stateUpdatePending_ = false;
+    bool saved_ = false;
+    bool saveFailed_ = false;
+    std::vector<Command> commandSnapshot_;
 
     friend class SettingsDialogTab;
 };

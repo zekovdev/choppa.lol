@@ -295,7 +295,7 @@ void SearchPopup::initLayout()
 {
     // VBOX
     {
-        auto *layout1 = new QVBoxLayout(this);
+        auto *layout1 = new QVBoxLayout(this->getLayoutContainer());
         layout1->setContentsMargins(0, 0, 0, 0);
         layout1->setSpacing(0);
 
@@ -330,8 +330,6 @@ void SearchPopup::initLayout()
 
             layout1->addWidget(this->channelView_);
         }
-
-        this->setLayout(layout1);
     }
 
     this->searchInput_->setFocus();

@@ -36,8 +36,7 @@ NotificationPage::NotificationPage()
             {
                 settings.emplace<QLabel>(
                     "You can be informed when certain channels go live. You "
-                    "must be logged in to receive live notifications."
-                    "\nYou can be informed in multiple ways:");
+                    "can be informed in multiple ways:");
 
                 settings.append(this->createCheckBox(
                     "Flash taskbar", getSettings()->notificationFlashTaskbar));
@@ -64,8 +63,7 @@ NotificationPage::NotificationPage()
                     "start menu folder if needed by live notifications."
                     "\n(On portable mode, this is disabled by "
                     "default)"));
-#endif
-#if defined(Q_OS_WIN) || defined(CHATTERINO_WITH_LIBNOTIFY)
+
                 auto openIn = settings.emplace<QHBoxLayout>().withoutMargin();
                 {
                     openIn

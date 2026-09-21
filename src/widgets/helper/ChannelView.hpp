@@ -46,6 +46,7 @@ using MessageElementFlags = FlagsEnum<MessageElementFlag>;
 
 class Scrollbar;
 class LabelButton;
+class ModDragSlider;
 struct Link;
 class MessageLayoutElement;
 class Split;
@@ -199,16 +200,9 @@ public:
     /// Checks if this view has a #sourceChannel
     bool hasSourceChannel() const;
 
-    /// The platform channel this view derives its messages from.
-    ///
-    /// The currently active non-virtual source channel. In case of nested
-    /// views, this uses the #sourceChannel(), otherwise it uses the
-    /// #underlyingChannel().
-    ChannelPtr effectiveSourceChannel() const;
-
     std::vector<MessageLayoutPtr> &getMessagesSnapshot();
 
-    void queueLayout(bool disableAnimation = false);
+    void queueLayout();
     void invalidateBuffers();
 
     void clearMessages();
@@ -241,8 +235,6 @@ public:
 
     Scrollbar *scrollbar();
 
-    Split *findParentSplit() const;
-
     using ChannelViewID = std::size_t;
     ///
     /// \brief Get the ID of this ChannelView
@@ -255,14 +247,9 @@ public:
     pajlada::Signals::NoArgSignal selectionChanged;
     pajlada::Signals::Signal<HighlightState> tabHighlightRequested;
     pajlada::Signals::NoArgSignal liveStatusChanged;
-    pajlada::Signals::Signal<const MessageLayoutElement *,
-                             Qt::KeyboardModifiers>
-        elementClicked;
-    pajlada::Signals::Signal<const Link &, Qt::KeyboardModifiers> linkClicked;
+    pajlada::Signals::Signal<const Link &> linkClicked;
     pajlada::Signals::Signal<QString, FromTwitchLinkOpenChannelIn>
         openChannelIn;
-    pajlada::Signals::Signal<QMenu *, const MessageLayoutElement *>
-        messageMenuCreated;
 
     /// This signal fires when a message passed filters and was added to the channel view
     Q_SIGNAL void messageAddedToChannel(MessagePtr &message);
@@ -316,10 +303,10 @@ private:
     void messagesUpdated();
 
     void performLayout(bool causedByScrollbar = false,
-                       bool disableAnimation = false);
+                       bool causedByShow = false);
     void layoutVisibleMessages(const std::vector<MessageLayoutPtr> &messages);
     void updateScrollbar(const std::vector<MessageLayoutPtr> &messages,
-                         bool causedByScrollbar, bool disableAnimation);
+                         bool causedByScrollbar, bool causedByShow);
 
     void drawMessages(QPainter &painter, const QRect &area);
     void setSelection(const SelectionItem &start, const SelectionItem &end);
@@ -335,9 +322,8 @@ private:
                                     const MessageLayoutPtr &layout);
     void addTwitchLinkContextMenuItems(
         QMenu *menu, const MessageLayoutElement *hoveredElement);
-    void addCommandExecutionContextMenuItems(
-        QMenu *menu, const MessageLayoutElement *hoveredElement,
-        const MessageLayoutPtr &layout);
+    void addCommandExecutionContextMenuItems(QMenu *menu,
+                                             const MessageLayoutPtr &layout);
 
     int getLayoutWidth() const;
     void updatePauses();
@@ -448,6 +434,10 @@ private:
     QPointF lastDoubleClickPosition_;
     QTimer clickTimer_;
 
+    // URL under the cursor when the left button was pressed; a drag beyond
+    // the start-drag distance turns into a link drag instead of a selection
+    QString pendingLinkDragUrl_;
+
     bool isScrolling_ = false;
     bool isPanning_ = false;
     QPointF lastMiddlePressPosition_;
@@ -485,6 +475,18 @@ private:
     void scrollUpdateRequested();
 
     TooltipWidget *const tooltipWidget_{};
+
+    /// Drag-to-moderate handle shown on hovered messages when the user has
+    /// mod rights in the message's channel
+    ModDragSlider *modSlider_ = nullptr;
+
+    /// Shows/hides and positions @a modSlider_ for the hovered message
+    void updateModSlider(const std::shared_ptr<MessageLayout> &layout,
+                         const QPointF &eventPos, const QPointF &relativePos);
+
+    /// Updates the 7TV highlight "stacked" state of the message at @a index
+    void updateSeventvStacked(const std::vector<MessageLayoutPtr> &messages,
+                              size_t index, const QString &currentLogin);
 
     /// Pointer to a link info that hasn't loaded yet
     QPointer<LinkInfo> pendingLinkInfo_;

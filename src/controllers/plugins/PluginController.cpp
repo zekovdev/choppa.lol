@@ -14,14 +14,12 @@
 #    include "controllers/plugins/api/Accounts.hpp"
 #    include "controllers/plugins/api/ChannelRef.hpp"
 #    include "controllers/plugins/api/ConnectionHandle.hpp"
-#    include "controllers/plugins/api/DateTime.hpp"
 #    include "controllers/plugins/api/DebugLibrary.hpp"
 #    include "controllers/plugins/api/HTTPRequest.hpp"
 #    include "controllers/plugins/api/HTTPResponse.hpp"
 #    include "controllers/plugins/api/Images.hpp"
 #    include "controllers/plugins/api/IOWrapper.hpp"
 #    include "controllers/plugins/api/JSON.hpp"
-#    include "controllers/plugins/api/Menu.hpp"
 #    include "controllers/plugins/api/Message.hpp"
 #    include "controllers/plugins/api/WebSocket.hpp"
 #    include "controllers/plugins/api/WindowManager.hpp"
@@ -33,7 +31,6 @@
 #    include "singletons/Paths.hpp"
 #    include "singletons/Settings.hpp"
 #    include "singletons/WindowManager.hpp"
-#    include "util/Variant.hpp"
 #    include "widgets/splits/SplitContainer.hpp"
 #    include "widgets/Window.hpp"
 
@@ -133,10 +130,9 @@ bool PluginController::tryLoadFromDir(const QDir &pluginDir)
         {
             qCWarning(chatterinoLua) << "- " << why;
         }
-
-        this->plugins_.insert(
-            {pluginDir.dirName(),
-             UnloadedPlugin{pluginDir.dirName(), meta, pluginDir}});
+        auto plugin = std::make_unique<Plugin>(pluginDir.dirName(), nullptr,
+                                               meta, pluginDir);
+        this->plugins_.insert({pluginDir.dirName(), std::move(plugin)});
         return false;
     }
     this->load(index, pluginDir, meta);
@@ -259,8 +255,6 @@ void PluginController::initSol(sol::state_view &lua, Plugin *plugin)
     lua::api::images::createUserTypes(c2);
     lua::api::createAccounts(c2);
     lua::api::windowmanager::createUserTypes(c2);
-    lua::api::datetime::createUserTypes(c2);
-    lua::api::menu::createUserType(c2);
     c2["ChannelType"] = lua::createEnumTable<Channel::Type>(lua);
     c2["HTTPMethod"] = lua::createEnumTable<NetworkRequestType>(lua);
     c2["EventType"] = lua::createEnumTable<lua::api::EventType>(lua);
@@ -318,7 +312,6 @@ void PluginController::load(const QFileInfo &index, const QDir &pluginDir,
     auto plugin = std::make_unique<Plugin>(pluginName, l, meta, pluginDir);
     auto *temp = plugin.get();
     this->plugins_.insert({pluginName, std::move(plugin)});
-    this->queueChangeNotification();
 
     if (getApp()->getArgs().safeMode)
     {
@@ -361,29 +354,13 @@ bool PluginController::reload(const QString &id)
         return false;
     }
 
-    if (const auto *oPlugin = std::get_if<PluginPtr>(&it->second))
+    for (const auto &[cmd, _] : it->second->ownedCommands)
     {
-        const auto &plugin = *oPlugin;
-
-        for (const auto &[cmd, _] : plugin->ownedCommands)
-        {
-            getApp()->getCommands()->unregisterPluginCommand(cmd);
-        }
+        getApp()->getCommands()->unregisterPluginCommand(cmd);
     }
-
-    const auto loadDir = std::visit(variant::Overloaded{
-                                        [&](const PluginPtr &plugin) {
-                                            return plugin->loadDirectory_;
-                                        },
-                                        [&](const UnloadedPlugin &plugin) {
-                                            return plugin.loadDirectory;
-                                        },
-                                    },
-                                    it->second);
-
+    QDir loadDir = it->second->loadDirectory_;
     // Since Plugin owns the state, it will clean up everything related to it
     this->plugins_.erase(id);
-    this->queueChangeNotification();
     this->tryLoadFromDir(loadDir);
     return true;
 }
@@ -391,15 +368,8 @@ bool PluginController::reload(const QString &id)
 QString PluginController::tryExecPluginCommand(const QString &commandName,
                                                const CommandContext &ctx)
 {
-    for (const auto &[name, anyPlugin] : this->allPlugins())
+    for (auto &[name, plugin] : this->plugins_)
     {
-        const auto *oPl = std::get_if<PluginPtr>(&anyPlugin);
-        if (oPl == nullptr)
-        {
-            continue;
-        }
-        const auto &plugin = *oPl;
-
         if (auto it = plugin->ownedCommands.find(commandName);
             it != plugin->ownedCommands.end())
         {
@@ -447,15 +417,8 @@ Plugin *PluginController::getPluginByStatePtr(lua_State *L)
     auto *mainL = lua_tothread(L, -1);
     lua_pop(L, 1);
     L = mainL;
-    for (const auto &[name, anyPlugin] : this->allPlugins())
+    for (auto &[name, plugin] : this->plugins_)
     {
-        const auto *oPl = std::get_if<PluginPtr>(&anyPlugin);
-        if (oPl == nullptr)
-        {
-            continue;
-        }
-        const auto &plugin = *oPl;
-
         if (plugin->state_ == L)
         {
             return plugin.get();
@@ -464,19 +427,8 @@ Plugin *PluginController::getPluginByStatePtr(lua_State *L)
     return nullptr;
 }
 
-void PluginController::forEachPlugin(
-    FunctionRef<void(const std::unique_ptr<Plugin> &)> cb) const
-{
-    for (const auto &[_, anyPlugin] : this->allPlugins())
-    {
-        if (const auto *plugin = std::get_if<PluginPtr>(&anyPlugin))
-        {
-            cb(*plugin);
-        }
-    }
-}
-
-const std::map<QString, AnyPlugin> &PluginController::allPlugins() const
+const std::map<QString, std::unique_ptr<Plugin>> &PluginController::plugins()
+    const
 {
     return this->plugins_;
 }
@@ -487,16 +439,8 @@ std::pair<bool, QStringList> PluginController::updateCustomCompletions(
 {
     QStringList results;
 
-    for (const auto &[name, anyPlugin] : this->allPlugins())
+    for (const auto &[name, pl] : this->plugins())
     {
-        const auto *oPl = std::get_if<PluginPtr>(&anyPlugin);
-        if (oPl == nullptr)
-        {
-            continue;
-        }
-
-        const auto &pl = *oPl;
-
         if (!pl->error().isNull() || pl->state_ == nullptr)
         {
             continue;
@@ -542,22 +486,6 @@ std::pair<bool, QStringList> PluginController::updateCustomCompletions(
 WebSocketPool &PluginController::webSocketPool()
 {
     return this->webSocketPool_;
-}
-
-void PluginController::queueChangeNotification()
-{
-    if (this->changeNotificationQueued)
-    {
-        return;
-    }
-    this->changeNotificationQueued = true;
-    QMetaObject::invokeMethod(
-        qApp,
-        [this] {
-            this->changeNotificationQueued = false;
-            this->onPluginsUpdated.invoke();
-        },
-        Qt::QueuedConnection);
 }
 
 }  // namespace chatterino

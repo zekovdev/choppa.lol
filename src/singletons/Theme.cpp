@@ -281,6 +281,21 @@ namespace chatterino {
 
 const std::vector<ThemeDescriptor> Theme::builtInThemes{
     {
+        .key = "Choppa",
+        .path = ":/themes/Choppa.json",
+        .name = "Choppa",
+    },
+    {
+        .key = "Zekerino",
+        .path = ":/themes/Zekerino.json",
+        .name = "Zekerino",
+    },
+    {
+        .key = "Zekerino Soft",
+        .path = ":/themes/ZekerinoSoft.json",
+        .name = "Zekerino Soft",
+    },
+    {
         .key = "White",
         .path = ":/themes/White.json",
         .name = "White",
@@ -303,7 +318,7 @@ const std::vector<ThemeDescriptor> Theme::builtInThemes{
 };
 
 // Dark is our default & fallback theme
-const ThemeDescriptor Theme::fallbackTheme = Theme::builtInThemes.at(2);
+const ThemeDescriptor Theme::fallbackTheme = Theme::builtInThemes.at(4);
 
 bool Theme::isLightTheme() const
 {
@@ -317,6 +332,14 @@ bool Theme::isSystemTheme() const
 
 Theme::Theme(const Paths &paths)
 {
+    // Migrate the old fork defaults once; later theme choices remain respected.
+    if (!this->choppaMigrated.getValue())
+    {
+        if (this->themeName.getValue() == "Zekerino" ||
+            this->themeName.getValue() == "Zekerino Soft")
+            this->themeName = "Choppa";
+        this->choppaMigrated = true;
+    }
     this->themeName.connect(
         [this](auto themeName) {
             qCInfo(chatterinoTheme) << "Theme updated to" << themeName;
@@ -556,8 +579,7 @@ void Theme::parseFrom(const QJsonObject &root, bool isCustomTheme)
         this->buttons.copy = getResources().buttons.copyLight;
     }
 
-    // This assumes that we never update the application palette
-    auto palette = QApplication::palette();
+    QPalette palette;
 
     if (this->isLightTheme())
     {
@@ -577,7 +599,34 @@ void Theme::parseFrom(const QJsonObject &root, bool isCustomTheme)
         palette.setColor(QPalette::HighlightedText, Qt::white);
         palette.setColor(QPalette::PlaceholderText, {0x90, 0x90, 0x90});
     }
+    else
+    {
+        palette.setColor(QPalette::Window, this->window.background);
+        palette.setColor(QPalette::WindowText, this->window.text);
+        palette.setColor(QPalette::Text, this->window.text);
+        palette.setColor(QPalette::Base, this->window.background.darker(110));
+        palette.setColor(QPalette::AlternateBase,
+                         this->window.background.lighter(115));
+        palette.setColor(QPalette::ToolTipBase, this->window.background);
+        palette.setColor(QPalette::ToolTipText, this->window.text);
+        palette.setColor(QPalette::Button,
+                         this->window.background.lighter(130));
+        palette.setColor(QPalette::ButtonText, this->window.text);
+        palette.setColor(QPalette::BrightText, Qt::red);
+        palette.setColor(QPalette::Link, QColor("#29b6f6"));
+        palette.setColor(QPalette::Highlight, this->accent);
+        palette.setColor(QPalette::HighlightedText, Qt::white);
+        palette.setColor(QPalette::PlaceholderText, QColor(127, 127, 127));
+    }
+
+    palette.setColor(QPalette::Disabled, QPalette::Text, QColor(127, 127, 127));
+    palette.setColor(QPalette::Disabled, QPalette::WindowText,
+                     QColor(127, 127, 127));
+    palette.setColor(QPalette::Disabled, QPalette::ButtonText,
+                     QColor(127, 127, 127));
+
     this->palette = palette;
+    QApplication::setPalette(palette);
 }
 
 bool Theme::isAutoReloading() const

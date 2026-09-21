@@ -6,8 +6,6 @@
 
 #include "Application.hpp"
 #include "common/Args.hpp"
-#include "common/Modes.hpp"
-#include "common/QLogging.hpp"
 #include "controllers/filters/FilterRecord.hpp"
 #include "controllers/highlights/HighlightBadge.hpp"
 #include "controllers/highlights/HighlightBlacklistUser.hpp"
@@ -21,6 +19,8 @@
 #include "util/WindowsHelper.hpp"
 
 #include <pajlada/signals/scoped-connection.hpp>
+
+#include <unordered_set>
 
 namespace {
 
@@ -48,19 +48,20 @@ void initializeSignalVector(pajlada::Signals::SignalHolder &signalHolder,
 
 namespace chatterino {
 
-namespace {
+struct RegisteredSetting {
+    std::weak_ptr<pajlada::Settings::SettingData> setting;
+    std::weak_ptr<bool> lifetime;
+    SettingSnapshotFactory makeSnapshot;
+};
 
-// NOLINTNEXTLINE(cppcoreguidelines-avoid-non-const-global-variables)
-const auto &LOG = chatterinoSettings;
-
-}  // namespace
-
-std::vector<std::weak_ptr<pajlada::Settings::SettingData>> _settings;
+std::vector<RegisteredSetting> registeredSettings;
 
 void _actuallyRegisterSetting(
-    std::weak_ptr<pajlada::Settings::SettingData> setting)
+    std::weak_ptr<pajlada::Settings::SettingData> setting,
+    std::weak_ptr<bool> lifetime, SettingSnapshotFactory makeSnapshot)
 {
-    _settings.push_back(std::move(setting));
+    registeredSettings.push_back(
+        {std::move(setting), std::move(lifetime), std::move(makeSnapshot)});
 }
 
 bool Settings::isHighlightedUser(const QString &username)
@@ -76,10 +77,6 @@ bool Settings::isHighlightedUser(const QString &username)
     }
 
     return false;
-}
-
-void Settings::migrate(bool isTest)
-{
 }
 
 bool Settings::isBlacklistedUser(const QString &username)
@@ -163,14 +160,10 @@ bool Settings::toggleMutedChannel(const QString &channelName)
 
 Settings *Settings::instance_ = nullptr;
 
-Settings::Settings(const Modes &modes, const Args &args,
-                   const QString &settingsDirectory,
+Settings::Settings(const Args &args, const QString &settingsDirectory,
                    const SettingsArgs &settingsArgs)
     : prevInstance_(Settings::instance_)
     , disableSaving(args.dontSaveSettings)
-    , createShortcutForToasts(
-          "/notifications/createShortcutForToasts",
-          (modes.isPortable || modes.isExternallyPackaged) ? false : true)
 {
     QString settingsPath = settingsDirectory + "/settings.json";
 
@@ -179,7 +172,6 @@ Settings::Settings(const Modes &modes, const Args &args,
 
     if (settingsArgs.isTest)
     {
-        qCInfo(LOG) << "Loading settings from" << settingsPath;
         settingsInstance->load(qPrintable(settingsPath));
     }
     else
@@ -225,12 +217,6 @@ Settings::Settings(const Modes &modes, const Args &args,
         static_cast<uint64_t>(
             pajlada::Settings::SettingManager::SaveMethod::OnlySaveIfChanged));
 
-    // Run setting migrations
-    if (settingsArgs.runMigrations)
-    {
-        this->migrate(settingsArgs.isTest);
-    }
-
     initializeSignalVector(this->signalHolder, this->highlightedMessagesSetting,
                            this->highlightedMessages);
     initializeSignalVector(this->signalHolder, this->highlightedUsersSetting,
@@ -270,6 +256,17 @@ Settings::Settings(const Modes &modes, const Args &args,
         // reset to default, so it doesn't appear in the config
         this->showUnlistedEmotesDontUse.remove();
     }
+
+    if (this->chatFontFamily.getValue() == "Outfit" ||
+        this->chatFontFamily.getValue() == "Satoshi Variable")
+    {
+        this->chatFontFamily.setValue("Satoshi");
+    }
+    if (this->chatFontFamily.getValue() == "Satoshi" &&
+        this->chatFontWeight.getValue() != QFont::Bold)
+    {
+        this->chatFontWeight.setValue(QFont::Bold);
+    }
 }
 
 Settings::~Settings()
@@ -290,71 +287,39 @@ pajlada::Settings::SettingManager::SaveResult Settings::requestSave() const
 void Settings::saveSnapshot()
 {
     BenchmarkGuard benchmark("Settings::saveSnapshot");
-
-    rapidjson::Document *d = new rapidjson::Document(rapidjson::kObjectType);
-    rapidjson::Document::AllocatorType &a = d->GetAllocator();
-
-    for (const auto &weakSetting : _settings)
+    this->snapshotConnections_.clear();
+    this->settingSnapshot_.clear();
+    std::unordered_set<std::string> connectedPaths;
+    for (const auto &registered : registeredSettings)
     {
-        auto setting = weakSetting.lock();
+        if (registered.lifetime.expired())
+            continue;
+        auto setting = registered.setting.lock();
         if (!setting)
-        {
             continue;
-        }
-
-        rapidjson::Value key(setting->getPath().c_str(), a);
-        auto *curVal = setting->unmarshalJSON();
-        if (curVal == nullptr)
-        {
-            continue;
-        }
-
-        rapidjson::Value val;
-        val.CopyFrom(*curVal, a);
-        d->AddMember(key.Move(), val.Move(), a);
+        this->settingSnapshot_.push_back(registered.makeSnapshot());
+        if (connectedPaths.insert(setting->getPath()).second)
+            this->snapshotConnections_.managedConnect(
+                setting->updated, [this](const auto &, const auto &) {
+                    this->snapshotChanged.invoke();
+                });
     }
+}
 
-    // log("Snapshot state: {}", rj::stringify(*d));
-
-    this->snapshot_.reset(d);
+bool Settings::hasSnapshotChanges() const
+{
+    for (const auto &snapshot : this->settingSnapshot_)
+        if (snapshot.changed && snapshot.changed())
+            return true;
+    return false;
 }
 
 void Settings::restoreSnapshot()
 {
-    if (!this->snapshot_)
-    {
-        return;
-    }
-
     BenchmarkGuard benchmark("Settings::restoreSnapshot");
-
-    const auto &snapshot = *(this->snapshot_.get());
-
-    if (!snapshot.IsObject())
-    {
-        return;
-    }
-
-    for (const auto &weakSetting : _settings)
-    {
-        auto setting = weakSetting.lock();
-        if (!setting)
-        {
-            continue;
-        }
-
-        const char *path = setting->getPath().c_str();
-
-        if (!snapshot.HasMember(path))
-        {
-            continue;
-        }
-
-        pajlada::Settings::SignalArgs args;
-        args.compareBeforeSet = true;
-
-        setting->marshalJSON(snapshot[path], std::move(args));
-    }
+    for (const auto &snapshot : this->settingSnapshot_)
+        if (snapshot.restore)
+            snapshot.restore();
 }
 
 void Settings::disableSave()

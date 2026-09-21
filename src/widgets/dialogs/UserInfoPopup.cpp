@@ -38,6 +38,7 @@
 #include "util/PostToThread.hpp"
 #include "widgets/buttons/LabelButton.hpp"
 #include "widgets/buttons/PixmapButton.hpp"
+#include "widgets/ChoppaTitlebar.hpp"
 #include "widgets/dialogs/EditUserNotesDialog.hpp"
 #include "widgets/helper/ChannelView.hpp"
 #include "widgets/helper/InvisibleSizeGrip.hpp"
@@ -60,6 +61,7 @@
 #include <QNetworkAccessManager>
 #include <QNetworkReply>
 #include <QPointer>
+#include <QPushButton>
 #include <QStringBuilder>
 
 namespace {
@@ -177,14 +179,34 @@ namespace chatterino {
 
 using namespace literals;
 
-UserInfoPopup::UserInfoPopup(bool closeAutomatically, Split *split)
-    : DraggablePopup(closeAutomatically, split)
+UserInfoPopup::UserInfoPopup(bool /*closeAutomatically*/, Split *split)
+    : DraggablePopup(false, split, {BaseWindow::ContentChrome})
     , split_(split)
-    , closeAutomatically_(closeAutomatically)
+    , closeAutomatically_(false)
 {
     assert(split != nullptr &&
            "split being nullptr causes lots of bugs down the road");
     this->setWindowTitle("Usercard");
+    this->setObjectName("choppaUserCard");
+    this->setStyleSheet(R"(
+        #choppaUserCard { background: #111111; color: #eeeeee; }
+        #choppaUserCard QPushButton { widget-animation-duration: 0; background: #1a1a1a; color: #eeeeee; border: 1px solid transparent; border-radius: 6px; padding: 0px 8px; min-height: 26px; font: 700 12px 'Satoshi'; text-align: center; }
+        #choppaUserCard QPushButton:hover { background: #292929; color: white; }
+        #choppaUserCard QPushButton:focus { border-color: #888888; }
+        #choppaUserCard QPushButton:pressed { background: #202020; }
+        #choppaUserCard QPushButton#unban { background: #1a1a1a; color: #eeeeee; }
+        #choppaUserCard QPushButton#unban:hover { background: #292929; color: #ffffff; }
+        #choppaUserCard QPushButton#unban:pressed { background: #202020; }
+        #choppaUserCard QPushButton#ban { color: #ff8391; background: #341b20; }
+        #choppaUserCard QPushButton#ban:hover { color: #ffffff; background: #71313e; }
+        #choppaUserCard QPushButton#ban:pressed { background: #48202a; }
+        #choppaUserCard QPushButton:disabled { color: #777777; background: #191919; }
+        #choppaUserCard QCheckBox { border: none; padding: 6px; color: #bbbbbb; }
+        #choppaUserCard QCheckBox::indicator { width: 14px; height: 14px; border: 1px solid #555555; border-radius: 4px; background: #202020; }
+        #choppaUserCard QCheckBox::indicator:checked { background: #dddddd; border-color: #dddddd; }
+        #choppaUserCard QCheckBox::indicator:hover { border-color: #eeeeee; }
+        #choppaUserCard QLabel { background: transparent; border: none; color: #bbbbbb; }
+    )");
 
     HotkeyController::HotkeyMap actions{
         {"delete",
@@ -295,6 +317,10 @@ UserInfoPopup::UserInfoPopup(bool closeAutomatically, Split *split)
                       .setLayoutType<QGridLayout>()
                       .withoutMargin();
     auto layout = layers.emplace<QVBoxLayout>();
+    layout->setContentsMargins(12, 8, 12, 12);
+    layout->setSpacing(12);
+    if (!this->hasCustomWindowFrame())
+        layout->addWidget(new ChoppaTitlebar(this));
 
     // first line
     auto head = layout.emplace<QHBoxLayout>().withoutMargin();
@@ -303,7 +329,7 @@ UserInfoPopup::UserInfoPopup(bool closeAutomatically, Split *split)
         // avatar
         auto avatar = avatarBox.emplace<PixmapButton>(nullptr).assign(
             &this->ui_.avatarButton);
-        avatar->setScaleIndependentSize(100, 100);
+        avatar->setScaleIndependentSize(56, 56);
         avatar->setDim(DimButton::Dim::None);
         QObject::connect(
             avatar.getElement(), &Button::clicked,
@@ -352,7 +378,7 @@ UserInfoPopup::UserInfoPopup(bool closeAutomatically, Split *split)
                             [loginName] {
                                 auto *app = getApp();
                                 auto &window = app->getWindows()->createWindow(
-                                    WindowType::Popup, {});
+                                    WindowType::Popup, true);
                                 auto *split = window.getNotebook()
                                                   .getOrAddSelectedPage()
                                                   ->appendNewSplit(false);
@@ -478,7 +504,7 @@ UserInfoPopup::UserInfoPopup(bool closeAutomatically, Split *split)
         }
     }
 
-    layout.emplace<Line>(false);
+    layout->addSpacing(2);
 
     // second line
     auto user = layout.emplace<QHBoxLayout>().withoutMargin();
@@ -575,6 +601,7 @@ UserInfoPopup::UserInfoPopup(bool closeAutomatically, Split *split)
     notesPreview->setShouldElide(true);
 
     auto lineMod = layout.emplace<Line>(false);
+    lineMod->setFixedHeight(0);
 
     // third line
     auto moderation = layout.emplace<QHBoxLayout>().withoutMargin();
@@ -616,6 +643,11 @@ UserInfoPopup::UserInfoPopup(bool closeAutomatically, Split *split)
         // We can safely ignore this signal connection since we own the button, and
         // the button will always be destroyed before the UserInfoPopup
         std::ignore = timeout->buttonClicked.connect([this](auto item) {
+            if (!this->underlyingChannel_ ||
+                !this->underlyingChannel_->hasModRights() ||
+                this->userName_.compare(this->underlyingChannel_->getName(),
+                                        Qt::CaseInsensitive) == 0)
+                return;
             TimeoutWidget::Action action;
             int arg;
             std::tie(action, arg) = item;
@@ -661,7 +693,10 @@ UserInfoPopup::UserInfoPopup(bool closeAutomatically, Split *split)
         });
     }
 
-    layout.emplace<Line>(false);
+    auto *historyTitle = new QLabel(tr("RECENT MESSAGES"));
+    historyTitle->setStyleSheet(
+        "color: #888888; font: 700 10px 'Satoshi'; padding-top: 4px;");
+    layout->addWidget(historyTitle);
 
     // fourth line (last messages)
     auto logs = layout.emplace<QVBoxLayout>().withoutMargin();
@@ -674,7 +709,7 @@ UserInfoPopup::UserInfoPopup(bool closeAutomatically, Split *split)
         this->ui_.latestMessages =
             new ChannelView(this, this->split_, ChannelView::Context::UserCard,
                             getSettings()->scrollbackUsercardLimit);
-        this->ui_.latestMessages->setMinimumSize(400, 275);
+        this->ui_.latestMessages->setMinimumSize(380, 200);
         this->ui_.latestMessages->setSizePolicy(QSizePolicy::Expanding,
                                                 QSizePolicy::Expanding);
 
@@ -682,9 +717,10 @@ UserInfoPopup::UserInfoPopup(bool closeAutomatically, Split *split)
         logs->addWidget(this->ui_.latestMessages);
         logs->setAlignment(this->ui_.noMessagesLabel, Qt::AlignHCenter);
     }
+    layout->setStretch(layout->count() - 1, 1);
 
     // size grip
-    if (closeAutomatically)
+    if (this->closeAutomatically_)
     {
         layers->addWidget(new InvisibleSizeGrip(this), 0, 0,
                           Qt::AlignRight | Qt::AlignBottom);
@@ -705,17 +741,21 @@ void UserInfoPopup::themeChangedEvent()
     }
 }
 
+void UserInfoPopup::paintEvent(QPaintEvent *)
+{
+    QPainter painter(this);
+    painter.setRenderHint(QPainter::Antialiasing);
+    painter.setPen(QColor("#383838"));
+    painter.setBrush(QColor("#111111"));
+    painter.drawRoundedRect(QRectF(this->rect()).adjusted(0.5, 0.5, -0.5, -0.5),
+                            7, 7);
+}
+
 void UserInfoPopup::scaleChangedEvent(float /*scale*/)
 {
     this->themeChangedEvent();
 
-    QTimer::singleShot(20, this, [this] {
-        auto geo = this->geometry();
-        geo.setWidth(10);
-        geo.setHeight(10);
-
-        this->setGeometry(geo);
-    });
+    this->updateGeometry();
 }
 
 void UserInfoPopup::windowDeactivationEvent()
@@ -901,6 +941,27 @@ void UserInfoPopup::setData(const QString &name,
                             const ChannelPtr &contextChannel,
                             const ChannelPtr &openingChannel)
 {
+    this->userDataLifetime_ = std::make_shared<bool>(true);
+    this->userId_.clear();
+    this->helixAvatarUrl_.clear();
+    this->seventvAvatarUrl_.clear();
+    this->seventvUserID_.clear();
+    if (this->seventvAvatar_)
+    {
+        this->seventvAvatar_->stop();
+        delete this->seventvAvatar_;
+        this->seventvAvatar_ = nullptr;
+    }
+    this->isTwitchAvatarShown_ = true;
+    this->ui_.avatarButton->setPixmap(QPixmap());
+    this->ui_.switchAvatars->hide();
+    this->ui_.localizedNameLabel->hide();
+    this->ui_.localizedNameCopyButton->hide();
+    this->ui_.liveIndicator->hide();
+    this->ui_.followerCountLabel->setText(tr("Loading…"));
+    this->ui_.createdDateLabel->setText({});
+    this->ui_.followageLabel->setText({});
+    this->ui_.userIDLabel->setProperty("copy-text", QString());
     const QStringView idPrefix = u"id:";
     bool isId = name.startsWith(idPrefix);
     if (isId)
@@ -940,10 +1001,6 @@ void UserInfoPopup::setData(const QString &name,
     if (this->isKick_)
     {
         this->updateKickUserData();
-        if (this->ui_.pronounsLabel)
-        {
-            this->ui_.pronounsLabel->hide();
-        }
     }
     else
     {
@@ -979,9 +1036,6 @@ void UserInfoPopup::updateLatestMessages()
     this->ui_.latestMessages->setVisible(hasMessages);
     this->ui_.noMessagesLabel->setVisible(!hasMessages);
 
-    // shrink dialog in case ChannelView goes from visible to hidden
-    this->adjustSize();
-
     this->refreshConnection_ =
         std::make_unique<pajlada::Signals::ScopedConnection>(
             this->underlyingChannel_->messageAppended.connect(
@@ -1008,7 +1062,7 @@ void UserInfoPopup::updateLatestMessages()
 
 void UserInfoPopup::updateUserData()
 {
-    std::weak_ptr<bool> hack = this->lifetimeHack_;
+    std::weak_ptr<bool> hack = this->userDataLifetime_;
     auto currentUser = getApp()->getAccounts()->twitch.getCurrent();
 
     const auto onUserFetchFailed = [this, hack] {
@@ -1067,13 +1121,12 @@ void UserInfoPopup::updateUserData()
 
         this->setWindowTitle(TEXT_TITLE.arg(
             user.displayName, this->underlyingChannel_->getName()));
-        auto createdAt =
-            QDateTime::fromString(user.createdAt, Qt::ISODateWithMs);
-        auto createdStr = createdAt.toLocalTime().date().toString(Qt::ISODate);
-        this->ui_.createdDateLabel->setText(TEXT_CREATED.arg(createdStr));
+        this->ui_.createdDateLabel->setText(
+            TEXT_CREATED.arg(user.createdAt.section("T", 0, 0)));
         this->ui_.createdDateLabel->setToolTip(
-            formatLongFriendlyDuration(createdAt,
-                                       QDateTime::currentDateTimeUtc()) +
+            formatLongFriendlyDuration(
+                QDateTime::fromString(user.createdAt, Qt::ISODateWithMs),
+                QDateTime::currentDateTimeUtc()) +
             u" ago"_s);
         this->ui_.createdDateLabel->setMouseTracking(true);
         this->ui_.userIDLabel->setText(TEXT_USER_ID % user.id);
@@ -1090,7 +1143,7 @@ void UserInfoPopup::updateUserData()
         }
 
         getHelix()->getChannelFollowers(
-            user.id, {},
+            user.id,
             [this, hack](const auto &followers) {
                 if (!hack.lock())
                 {
@@ -1159,13 +1212,28 @@ void UserInfoPopup::updateUserData()
 
         if (type == Channel::Type::Twitch)
         {
-            // get subage
+            // get followage and subage
             getIvr()->getSubage(
                 this->userName_, this->underlyingChannel_->getName(),
                 [this, hack](const IvrSubage &subageInfo) {
                     if (!hack.lock())
                     {
                         return;
+                    }
+
+                    if (!subageInfo.followingSince.isEmpty())
+                    {
+                        QDateTime followedAt = QDateTime::fromString(
+                            subageInfo.followingSince, Qt::ISODate);
+                        QString followingSince =
+                            followedAt.toString("yyyy-MM-dd");
+                        this->ui_.followageLabel->setText("❤ Following since " +
+                                                          followingSince);
+                        this->ui_.followageLabel->setToolTip(
+                            formatLongFriendlyDuration(
+                                followedAt, QDateTime::currentDateTimeUtc()) +
+                            u" ago"_s);
+                        this->ui_.followageLabel->setMouseTracking(true);
                     }
 
                     if (subageInfo.isSubHidden)
@@ -1188,41 +1256,6 @@ void UserInfoPopup::updateUserData()
                     }
                 },
                 [] {});
-
-            // get followage
-            TwitchChannel *twitchChannel =
-                dynamic_cast<TwitchChannel *>(this->underlyingChannel_.get());
-            if (twitchChannel &&
-                (twitchChannel->isBroadcaster() || twitchChannel->isMod()))
-            {
-                getHelix()->getChannelFollowers(
-                    twitchChannel->roomId(), user.id,
-                    [this, hack](const auto &response) {
-                        if (!hack.lock())
-                        {
-                            return;
-                        }
-                        if (response.specifiedFollower)
-                        {
-                            const auto &followedAt =
-                                response.specifiedFollower->followedAt;
-                            this->ui_.followageLabel->setText(
-                                "❤ Following since " +
-                                followedAt.toLocalTime().date().toString(
-                                    Qt::ISODate));
-                            this->ui_.followageLabel->setToolTip(
-                                formatLongFriendlyDuration(
-                                    followedAt,
-                                    QDateTime::currentDateTimeUtc()) +
-                                u" ago"_s);
-                            this->ui_.followageLabel->setMouseTracking(true);
-                        }
-                    },
-                    [](const auto &errorMessage) {
-                        qCWarning(chatterinoTwitch)
-                            << "Error getting follow age:" << errorMessage;
-                    });
-            }
         }
 
         // get pronouns
@@ -1288,44 +1321,24 @@ void UserInfoPopup::updateUserData()
 void UserInfoPopup::loadAvatar(const QString &userID, const QString &pictureURL,
                                bool isKick)
 {
-    auto filename =
-        getApp()->getPaths().cacheDirectory() + "/" + hashUrl(pictureURL);
-    QFile cacheFile(filename);
-    if (cacheFile.exists())
-    {
-        // In this case, readAll will just return empty data.
-        std::ignore = cacheFile.open(QIODevice::ReadOnly);
-        QPixmap avatar{};
-
-        avatar.loadFromData(cacheFile.readAll());
-        this->ui_.avatarButton->setPixmap(avatar);
-        this->avatarPixmap_ = std::move(avatar);
-    }
-    else
-    {
-        QNetworkRequest req(pictureURL);
-        req.setHeader(QNetworkRequest::UserAgentHeader, "Chatterino");
-        static auto *manager = new QNetworkAccessManager();
-        auto *reply = manager->get(req);
-
-        QObject::connect(reply, &QNetworkReply::finished, this,
-                         [this, reply, filename] {
-                             if (reply->error() == QNetworkReply::NoError)
-                             {
-                                 const auto data = reply->readAll();
-
-                                 QPixmap avatar;
-                                 avatar.loadFromData(data);
-                                 this->ui_.avatarButton->setPixmap(avatar);
-                                 this->saveCacheAvatar(data, filename);
-                                 this->avatarPixmap_ = std::move(avatar);
-                             }
-                             else
-                             {
-                                 this->ui_.avatarButton->setPixmap(QPixmap());
-                             }
-                         });
-    }
+    // The shared request cache owns replies; callbacks cannot outlive this user selection.
+    NetworkRequest(pictureURL)
+        .cache()
+        .caller(this)
+        .timeout(20000)
+        .onSuccess(
+            [this, lifetime = std::weak_ptr<bool>(this->userDataLifetime_)](
+                const NetworkResult &result) {
+                if (!lifetime.lock())
+                    return;
+                QPixmap avatar;
+                if (!avatar.loadFromData(result.getData()))
+                    return;
+                this->avatarPixmap_ = std::move(avatar);
+                if (this->isTwitchAvatarShown_)
+                    this->ui_.avatarButton->setPixmap(this->avatarPixmap_);
+            })
+        .execute();
 
     this->helixAvatarUrl_ = pictureURL;
     this->updateAvatarUrl();
@@ -1341,7 +1354,7 @@ void UserInfoPopup::loadSevenTVAvatar(const QString &userID, bool isKick)
     auto fmt = isKick ? SEVENTV_KICK_USER_API : SEVENTV_TWITCH_USER_API;
     NetworkRequest(fmt.arg(userID))
         .timeout(20000)
-        .onSuccess([this, hack = std::weak_ptr<bool>(this->lifetimeHack_)](
+        .onSuccess([this, hack = std::weak_ptr<bool>(this->userDataLifetime_)](
                        const NetworkResult &result) {
             if (!hack.lock())
             {
@@ -1392,28 +1405,17 @@ void UserInfoPopup::loadSevenTVAvatar(const QString &userID, bool isKick)
                 return;
             }
 
-            QNetworkRequest req(url);
-
-            // We're using this manager instead of the one provided
-            // in NetworkManager, because we're on a different thread.
-            static auto *manager = new QNetworkAccessManager();
-            auto *reply = manager->get(req);
-
-            QObject::connect(reply, &QNetworkReply::finished, this,
-                             [this, reply, url, filename, format] {
-                                 if (reply->error() == QNetworkReply::NoError)
-                                 {
-                                     this->saveCacheAvatar(reply->readAll(),
-                                                           filename);
-                                     this->setSevenTVAvatar(filename, format);
-                                 }
-                                 else
-                                 {
-                                     qCWarning(chatterinoSeventv)
-                                         << "Error fetching Profile Picture:"
-                                         << reply->error();
-                                 }
-                             });
+            NetworkRequest(url)
+                .caller(this)
+                .timeout(20000)
+                .onSuccess([this, hack, filename,
+                            format](const NetworkResult &result) {
+                    if (!hack.lock())
+                        return;
+                    this->saveCacheAvatar(result.getData(), filename);
+                    this->setSevenTVAvatar(filename, format);
+                })
+                .execute();
 
             return;
         })
@@ -1428,9 +1430,15 @@ void UserInfoPopup::setSevenTVAvatar(const QString &filename,
     {
         qCWarning(chatterinoSeventv)
             << "Error reading Profile Picture, " << movie->lastErrorString();
+        delete movie;
         return;
     }
 
+    if (this->seventvAvatar_)
+    {
+        this->seventvAvatar_->stop();
+        delete this->seventvAvatar_;
+    }
     QObject::connect(movie, &QMovie::frameChanged, this, [this, movie] {
         this->ui_.avatarButton->setPixmap(movie->currentPixmap());
     });
@@ -1576,85 +1584,57 @@ void UserInfoPopup::updateKickUserData()
         self->ui_.notesAdd->setEnabled(true);
     };
 
-    auto fetchChannelInfo = [self = QPointer(this), onChannelFetched,
-                             onChannelFetchFailed](const QString &userName) {
-        KickApi::privateChannelInfo(
-            userName,
-            [self, onChannelFetched, onChannelFetchFailed](const auto &res) {
-                if (!self)
-                {
-                    return;
-                }
-                if (res)
-                {
-                    onChannelFetched(self.get(), *res);
-                }
-                else
-                {
-                    qCDebug(chatterinoKick)
-                        << "Channel fetch failed" << res.error();
-                    onChannelFetchFailed(self.get());
-                }
-            });
-    };
-    auto fetchUserInChannelInfo =
-        [self = QPointer(this),
-         channelName =
-             this->underlyingChannel_->getName()](const QString &userName) {
-            KickApi::privateUserInChannelInfo(
-                userName, channelName, [self](const auto &res) {
-                    if (!self || !res)
-                    {
-                        return;
-                    }
+    // FIXME: this doesn't support opening by user ID
 
-                    if (res->followingSince)
-                    {
-                        QString followingSince =
-                            res->followingSince->date().toString(Qt::ISODate);
-                        self->ui_.followageLabel->setText("❤ Following since " +
-                                                          followingSince);
-                        self->ui_.followageLabel->setToolTip(
-                            formatLongFriendlyDuration(
-                                *res->followingSince,
-                                QDateTime::currentDateTimeUtc()) +
-                            u" ago"_s);
-                        self->ui_.followageLabel->setMouseTracking(true);
-                    }
+    KickApi::privateChannelInfo(
+        this->userName_,
+        [self = QPointer(this), onChannelFetched, onChannelFetchFailed,
+         lifetime =
+             std::weak_ptr<bool>(this->userDataLifetime_)](const auto &res) {
+            if (!self || !lifetime.lock())
+            {
+                return;
+            }
+            if (res)
+            {
+                onChannelFetched(self.get(), *res);
+            }
+            else
+            {
+                qCDebug(chatterinoKick)
+                    << "Channel fetch failed" << res.error();
+                onChannelFetchFailed(self.get());
+            }
+        });
+    KickApi::privateUserInChannelInfo(
+        this->userName_, this->underlyingChannel_->getName(),
+        [self = QPointer(this), lifetime = std::weak_ptr<bool>(
+                                    this->userDataLifetime_)](const auto &res) {
+            if (!self || !res || !lifetime.lock())
+            {
+                return;
+            }
 
-                    if (res->subscriptionMonths)
-                    {
-                        self->ui_.subageLabel->setText(
-                            QString("★ Subscribed for %2 months")
-                                .arg(*res->subscriptionMonths));
-                    }
-                });
-        };
+            if (res->followingSince)
+            {
+                QString followingSince =
+                    res->followingSince->date().toString(Qt::ISODate);
+                self->ui_.followageLabel->setText("❤ Following since " +
+                                                  followingSince);
+                self->ui_.followageLabel->setToolTip(
+                    formatLongFriendlyDuration(
+                        *res->followingSince, QDateTime::currentDateTimeUtc()) +
+                    u" ago"_s);
+                self->ui_.followageLabel->setMouseTracking(true);
+            }
 
-    if (!this->userId_.isEmpty() && this->userName_.isEmpty())
-    {
-        std::array ids{static_cast<uint64_t>(this->userId_.toULongLong())};
-        getKickApi()->getChannels(
-            ids, [self = QPointer(this), onChannelFetchFailed, fetchChannelInfo,
-                  fetchUserInChannelInfo](const auto &res) {
-                if (!self)
-                {
-                    return;
-                }
-                if (!res || res->size() != 1)
-                {
-                    onChannelFetchFailed(self);
-                    return;
-                }
-                fetchChannelInfo((*res)[0].slug);
-                fetchUserInChannelInfo((*res)[0].slug);
-            });
-    }
-    else
-    {
-        fetchChannelInfo(this->userName_);
-        fetchUserInChannelInfo(this->userName_);
-    }
+            if (res->subscriptionMonths)
+            {
+                self->ui_.subageLabel->setText(
+                    QString("★ Subscribed for %2 months")
+                        .arg(*res->subscriptionMonths));
+            }
+        });
 
     this->ui_.block->setEnabled(false);
     this->ui_.ignoreHighlights->setEnabled(false);
@@ -1703,12 +1683,11 @@ void UserInfoPopup::onKickProfilePictureClick(Qt::MouseButton button)
             menu->addAction(
                 "Open channel in a new popup window", this, [username] {
                     auto *app = getApp();
-                    auto *split =
-                        app->getWindows()
-                            ->createWindow(WindowType::Popup, {.show = true})
-                            .getNotebook()
-                            .getOrAddSelectedPage()
-                            ->appendNewSplit(false);
+                    auto *split = app->getWindows()
+                                      ->createWindow(WindowType::Popup, true)
+                                      .getNotebook()
+                                      .getOrAddSelectedPage()
+                                      ->appendNewSplit(false);
                     split->setChannel(
                         app->getKickChatServer()->getOrCreate(username));
                 });
@@ -1767,68 +1746,46 @@ void UserInfoPopup::appendCommonProfileActions(QMenu *menu)
 UserInfoPopup::TimeoutWidget::TimeoutWidget()
     : BaseWidget(nullptr)
 {
-    auto layout = LayoutCreator<TimeoutWidget>(this)
-                      .setLayoutType<QHBoxLayout>()
-                      .withoutMargin();
-
-    int buttonWidth = 40;
-    int buttonHeight = 32;
-
-    layout->setSpacing(16);
-
-    const auto addLayout = [&](const QString &text) {
-        auto vbox = layout.emplace<QVBoxLayout>().withoutMargin();
-        auto title = vbox.emplace<QHBoxLayout>().withoutMargin();
-        title->addStretch(1);
-        auto label = title.emplace<Label>(text);
-        label->setStyleSheet("color: #BBB");
-        label->setPadding(QMargins{});
-        title->addStretch(1);
-
-        auto hbox = vbox.emplace<QHBoxLayout>().withoutMargin();
-        hbox->setSpacing(0);
-        return hbox;
-    };
-
-    const auto addButton = [&](Action action, const QString &title,
-                               const QPixmap &pixmap) {
-        auto button = addLayout(title).emplace<PixmapButton>(nullptr);
-        button->setPixmap(pixmap);
-        button->setScaleIndependentSize(buttonHeight, buttonHeight);
-        button->setBorderColor(QColor(255, 255, 255, 127));
-
-        QObject::connect(
-            button.getElement(), &Button::leftClicked, [this, action] {
-                this->buttonClicked.invoke(std::make_pair(action, -1));
-            });
-    };
-
-    auto addTimeouts = [&](const QString &title) {
-        auto hbox = addLayout(title);
-
-        for (const auto &item : getSettings()->timeoutButtons.getValue())
-        {
-            auto a = hbox.emplace<LabelButton>();
-            a->setPadding({0, 0});
-            a->setText(QString::number(item.second) + item.first);
-
-            a->setScaleIndependentSize(buttonWidth, buttonHeight);
-            a->setBorderColor(borderColor);
-
-            const auto pair =
-                std::make_pair(Action::Timeout, calculateTimeoutDuration(item));
-            this->timeoutButtons.emplace_back(a.getElement(), pair.second);
-
-            QObject::connect(a.getElement(), &LabelButton::leftClicked,
-                             [this, pair] {
-                                 this->buttonClicked.invoke(pair);
-                             });
-        }
-    };
-
-    addButton(Unban, "Unban", getResources().buttons.unban);
-    addTimeouts("Timeouts");
-    addButton(Ban, "Ban", getResources().buttons.ban);
+    auto *layout = new QVBoxLayout(this);
+    layout->setContentsMargins(0, 0, 0, 0);
+    layout->setSpacing(8);
+    auto *actions = new QHBoxLayout;
+    auto *title = new QLabel(tr("MODERATION"));
+    title->setStyleSheet(
+        "color: #888888; font: 700 10px 'Satoshi';");
+    actions->addWidget(title, 1);
+    for (const auto &[text, action] : std::vector<std::pair<QString, Action>>{
+             {tr("Unban"), Unban}, {tr("Ban"), Ban}})
+    {
+        auto *button = new QPushButton(text);
+        button->setObjectName(action == Ban ? "ban" : "unban");
+        button->setAutoDefault(false);
+        button->setDefault(false);
+        button->setCursor(Qt::PointingHandCursor);
+        actions->addWidget(button);
+        connect(button, &QPushButton::clicked, this, [this, action] {
+            this->buttonClicked.invoke(std::make_pair(action, -1));
+        });
+    }
+    layout->addLayout(actions);
+    auto *timeouts = new QGridLayout;
+    timeouts->setSpacing(5);
+    int index = 0;
+    for (const auto &item : getSettings()->timeoutButtons.getValue())
+    {
+        const int seconds = calculateTimeoutDuration(item);
+        auto *button =
+            new QPushButton(QString::number(item.second) + item.first);
+        button->setToolTip(tr("Timeout for %1 seconds").arg(seconds));
+        this->timeoutButtons.emplace_back(button, seconds);
+        timeouts->addWidget(button, index / 8, index % 8);
+        ++index;
+        connect(button, &QPushButton::clicked, this, [this, seconds] {
+            this->buttonClicked.invoke(
+                std::make_pair(Action::Timeout, seconds));
+        });
+    }
+    layout->addLayout(timeouts);
 }
 
 void UserInfoPopup::TimeoutWidget::paintEvent(QPaintEvent *)

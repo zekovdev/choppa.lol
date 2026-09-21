@@ -1,73 +1,410 @@
+/* Shared desktop settings controls. */
+
 * {
-    font-size: 14px;
-    font-family: "Segoe UI";
+    font-family: "Satoshi";
+    font-size: 12px;
+    font-weight: 700;
+    color: #eeeeee;
 }
 
-QCheckBox::indicator {
-    width: 14px;
-    height: 14px;
+/* ---- left sidebar (category list) ---- */
+#settingsSurface {
+    background: #111111;
+}
+QDialogButtonBox {
+    background: #111111;
+    padding: 4px 0px;
 }
 
-chatterino--ComboBox {
-    width: 120px;
+#tabWidget {
+    background: #0a0a0a;
+    border-bottom: 1px solid #242424;
+}
+chatterino--SettingsDialogTab {
+    border-radius: 6px;
+    background: transparent;
+    font-size: 13px;
+}
+chatterino--SettingsDialogTab:hover {
+    background: #111111;
 }
 
-QScrollArea {
-    border: none;
+/* ---- right side pages ---- */
+#pages,
+chatterino--SettingsPage {
+    background: #111111;
 }
-
-QScrollArea QFrame {
-    border: none;
-}
-
-QComboBox QFrame {
-    background: #000;
-    border: 1px solid #66BCFF;
-}
-
-chatterino--SettingsDialog chatterino--SettingsDialogTab {
-    font-family: "Segoe UI";
-    font-size: 14;
-}
-
 chatterino--SettingsPage #generalSettingsScrollContent {
-    background: #222;
+    background: #111111;
+    padding: 0px;
 }
-
-chatterino--SettingsPage QToolTip {
-    padding: 2px;
-    background-color: #333333;
-    border: 1px solid #545454;
-    color: white;
+QScrollArea,
+QScrollArea > QWidget > QWidget {
+    border: none;
+    background: transparent;
 }
 
 chatterino--PageHeader {
-    margin-bottom: 12px;
+    margin-bottom: 8px;
 }
+QLabel#settingsPageTitle { font-size: 13px; font-weight: 700; padding: 8px 4px; }
 
+/* ---- section headers as distinct strips ---- */
 chatterino--TitleLabel {
-    font-family: "Segoe UI light";
-    font-size: 24px;
-    color: #4FC3F7; /* Should this be same as accent color? */
+    font-family: "Satoshi";
+    font-size: 13px;
+    font-weight: 700;
+    color: #eeeeee;
+    background: transparent;
+    border: none;
+    border-bottom: 1px solid #242424;
+    padding: 4px 0 6px 0;
+    margin-top: 10px;
+    margin-bottom: 8px;
 }
-
 chatterino--SubtitleLabel {
-    font-family: "Segoe UI light";
-    font-size: 16px;
-    color: #4FC3F7; /* Should this be same as accent color? */
+    font-family: "Satoshi";
+    font-size: 13px;
+    font-weight: 700;
+    color: #cccccc;
+    margin-top: 8px;
 }
-
+chatterino--SLabel {
+    color: #cccccc;
+    font-size: 13px;
+}
 chatterino--DescriptionLabel {
-    color: #999;
+    color: #a0a0a0;
+    padding-bottom: 2px;
 }
-
 QLabel#description {
-    color: #999;
+    color: #a0a0a0;
     padding-left: 10px;
 }
-
 chatterino--NavigationLabel {
-    font-family: "Segoe UI light";
-    font-size: 15px;
-    color: #A6DDF4;
+    font-size: 13px;
+    color: #a0a0a0;
 }
+
+/* ---- setting rows: subtle hover highlight ---- */
+chatterino--SettingWidget {
+    border-radius: 6px;
+    min-height: 28px;
+}
+chatterino--SettingWidget:hover {
+    background: #1a1a1a;
+}
+
+/* ---- fallback checkboxes (non-toggle) ---- */
+QCheckBox {
+    spacing: 8px;
+    background: transparent;
+}
+QCheckBox::indicator {
+    width: 16px;
+    height: 16px;
+    border-radius: 4px;
+    border: 1px solid #383838;
+    background: #1a1a1a;
+}
+QCheckBox::indicator:hover {
+    border: 1px solid #888888;
+}
+QCheckBox::indicator:checked {
+    background: #d6d6d6;
+    border: 1px solid #888888;
+}
+
+/* table/list/tree cell check indicators -> accent boxes (match toggles' color) */
+QTableView::indicator,
+QTreeView::indicator,
+QListView::indicator,
+QAbstractItemView::indicator {
+    width: 16px;
+    height: 16px;
+    border-radius: 4px;
+    border: 1px solid #383838;
+    background: #1a1a1a;
+}
+QTableView::indicator:checked,
+QTreeView::indicator:checked,
+QListView::indicator:checked,
+QAbstractItemView::indicator:checked {
+    background: #d6d6d6;
+    border: 1px solid #888888;
+}
+
+/* ---- combo boxes / dropdowns ---- */
+QComboBox,
+chatterino--ComboBox {
+    background: #1a1a1a;
+    border: 1px solid #383838;
+    border-radius: 6px;
+    padding: 5px 10px;
+    min-width: 0px;
+    min-height: 18px;
+    color: #eeeeee;
+}
+QComboBox:hover {
+    border: 1px solid #888888;
+}
+QComboBox::drop-down {
+    border: none;
+    width: 22px;
+}
+QComboBox QAbstractItemView,
+QComboBox QFrame {
+    background: #111111;
+    border: 1px solid #383838;
+    border-radius: 6px;
+    padding: 4px;
+    selection-background-color: #d6d6d6;
+    selection-color: #0a0a0a;
+    outline: none;
+}
+
+/* ---- line edits / spin boxes ---- */
+QLineEdit,
+QSpinBox,
+QDoubleSpinBox {
+    background: #1a1a1a;
+    border: 1px solid #383838;
+    border-radius: 6px;
+    padding: 4px 8px;
+    min-height: 20px;
+    color: #eeeeee;
+    selection-background-color: #d6d6d6;
+    selection-color: #0a0a0a;
+}
+QLineEdit:focus,
+QSpinBox:focus,
+QDoubleSpinBox:focus {
+    border: 1px solid #888888;
+}
+
+/* ---- buttons ---- */
+QPushButton {
+    background: #1a1a1a;
+    border: 1px solid #383838;
+    border-radius: 6px;
+    padding: 0px 12px;
+    min-height: 28px;
+    color: #eeeeee;
+}
+QPushButton:hover {
+    background: #292929;
+    border: 1px solid #555555;
+}
+QPushButton:pressed {
+    background: #202020;
+}
+
+/* ---- scrollbars ---- */
+QScrollBar:vertical {
+    background: transparent;
+    width: 10px;
+    margin: 0;
+}
+QScrollBar::handle:vertical {
+    background: #333333;
+    border-radius: 5px;
+    min-height: 28px;
+}
+QScrollBar::handle:vertical:hover {
+    background: #444444;
+}
+QScrollBar:horizontal {
+    background: transparent;
+    height: 10px;
+    margin: 0;
+}
+QScrollBar::handle:horizontal {
+    background: #333333;
+    border-radius: 5px;
+    min-width: 28px;
+}
+QScrollBar::add-line,
+QScrollBar::sub-line {
+    width: 0;
+    height: 0;
+    background: none;
+}
+QScrollBar::add-page,
+QScrollBar::sub-page {
+    background: none;
+}
+
+/* ---- tooltips ---- */
+chatterino--SettingsPage QToolTip,
+QToolTip {
+    padding: 5px 8px;
+    background-color: #0a0a0a;
+    border: 1px solid #242424;
+    color: #eeeeee;
+}
+
+/* ==== generic widget coverage for every settings page ==== */
+
+/* group boxes as cards (About, etc.) */
+QGroupBox {
+    background: #0a0a0a;
+    border: 1px solid #242424;
+    border-radius: 6px;
+    margin-top: 26px;
+    padding: 14px;
+    color: #eeeeee;
+}
+QGroupBox::title {
+    subcontrol-origin: margin;
+    subcontrol-position: top left;
+    left: 10px;
+    padding: 4px 10px;
+    background: #0a0a0a;
+    border: 1px solid #242424;
+    border-radius: 6px;
+    color: #cccccc;
+    font-weight: 700;
+}
+QGroupBox QLabel {
+    background: transparent;
+    color: #eeeeee;
+}
+QLabel a {
+    color: #d6d6d6;
+    text-decoration: none;
+}
+
+/* text edits */
+QTextEdit,
+QPlainTextEdit {
+    background: #111111;
+    border: 1px solid #383838;
+    border-radius: 6px;
+    padding: 8px 10px;
+    color: #eeeeee;
+    selection-background-color: #d6d6d6;
+    selection-color: #0a0a0a;
+}
+
+/* item views: tables, lists, trees */
+QTableView,
+QListView,
+QTreeView,
+QAbstractItemView {
+    background: #111111;
+    alternate-background-color: #141414;
+    border: 1px solid #242424;
+    border-radius: 6px;
+    gridline-color: #242424;
+    color: #eeeeee;
+    selection-background-color: #d6d6d6;
+    selection-color: #0a0a0a;
+    outline: none;
+}
+QTableView::item,
+QListView::item,
+QTreeView::item {
+    padding: 4px 6px;
+    border: none;
+}
+QTableView::item:hover,
+QListView::item:hover,
+QTreeView::item:hover {
+    background: #1a1a1a;
+}
+QTableView::item:selected,
+QListView::item:selected,
+QTreeView::item:selected {
+    background: #d6d6d6;
+    color: #0a0a0a;
+}
+QHeaderView {
+    background: #0a0a0a;
+    border: none;
+}
+QHeaderView::section {
+    background: #0a0a0a;
+    color: #cccccc;
+    border: none;
+    border-right: 1px solid #242424;
+    border-bottom: 1px solid #242424;
+    padding: 5px 8px;
+}
+QTableCornerButton::section {
+    background: #0a0a0a;
+    border: 1px solid #242424;
+}
+
+/* tab bars / tab widgets (Highlights: Messages/Users/Badges, etc.) */
+QTabWidget::pane {
+    background: #111111;
+    border: 1px solid #242424;
+    border-radius: 6px;
+    top: -1px;
+}
+QTabBar {
+    background: transparent;
+}
+QTabBar::tab {
+    background: #1a1a1a;
+    color: #a0a0a0;
+    border: 1px solid #242424;
+    border-top-left-radius: 6px;
+    border-top-right-radius: 6px;
+    padding: 6px 14px;
+    margin-right: 2px;
+}
+QTabBar::tab:hover {
+    background: #242424;
+    color: #eeeeee;
+}
+QTabBar::tab:selected {
+    background: #111111;
+    color: #eeeeee;
+    border-bottom: 2px solid #d6d6d6;
+}
+
+/* radio buttons */
+QRadioButton {
+    spacing: 8px;
+    background: transparent;
+    color: #eeeeee;
+}
+QRadioButton::indicator {
+    width: 16px;
+    height: 16px;
+    border-radius: 6px;
+    border: 1px solid #383838;
+    background: #1a1a1a;
+}
+QRadioButton::indicator:hover {
+    border: 1px solid #888888;
+}
+QRadioButton::indicator:checked {
+    background: #d6d6d6;
+    border: 1px solid #888888;
+}
+
+/* sliders */
+QSlider::groove:horizontal {
+    height: 4px;
+    background: #242424;
+    border-radius: 2px;
+}
+QSlider::sub-page:horizontal {
+    background: #d6d6d6;
+    border-radius: 2px;
+}
+QSlider::handle:horizontal {
+    width: 14px;
+    height: 14px;
+    margin: -6px 0;
+    background: #eeeeee;
+    border-radius: 7px;
+}
+QSlider::handle:horizontal:hover {
+    background: #eeeeee;
+}
+
+QPushButton:focus { border-color: #888888; }
+QPushButton:disabled { color: #707070; }

@@ -71,9 +71,8 @@ QJsonValue getForArchitecture(const QJsonObject &obj, const QString &key)
 
 namespace chatterino {
 
-Updates::Updates(const Modes &modes_, const Paths &paths_, Settings &settings)
+Updates::Updates(const Paths &paths_, Settings &settings)
     : paths(paths_)
-    , modes(modes_)
     , currentVersion_(CHATTERINO_VERSION)
     , updateGuideLink_("https://chatterino.com")
 {
@@ -175,7 +174,7 @@ void Updates::installUpdates()
     box->open();
     QDesktopServices::openUrl(this->updateGuideLink_);
 #elif defined Q_OS_WIN
-    if (this->modes.isPortable)
+    if (Modes::instance().isPortable)
     {
         QMessageBox *box =
             new QMessageBox(QMessageBox::Information, "Chatterino Update",
@@ -234,7 +233,7 @@ void Updates::installUpdates()
                 file.flush();
                 file.close();
 
-                auto updaterPath = Updates::portableUpdaterPath(this->paths);
+                auto updaterPath = Updates::portableUpdaterPath();
                 if (!QFile::exists(updaterPath))
                 {
                     this->setStatus_(MissingPortableUpdater);
@@ -488,9 +487,9 @@ Updates::Status Updates::getStatus() const
     return this->status_;
 }
 
-QString Updates::portableUpdaterPath(const Paths &paths)
+QString Updates::portableUpdaterPath()
 {
-    return combinePath(paths.rootAppDataDirectory,
+    return combinePath(QCoreApplication::applicationDirPath(),
                        "updater.1/ChatterinoUpdater.exe");
 }
 

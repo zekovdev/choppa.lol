@@ -16,7 +16,6 @@
 #include "mocks/ChatterinoBadges.hpp"
 #include "mocks/DisabledStreamerMode.hpp"
 #include "mocks/EmoteController.hpp"
-#include "mocks/Helix.hpp"
 #include "mocks/LinkResolver.hpp"
 #include "mocks/Logging.hpp"
 #include "mocks/TwitchIrcServer.hpp"
@@ -68,8 +67,13 @@ const QString IRC_CATEGORY = u"IrcMessageHandler"_s;
 class MockApplication : public mock::BaseApplication
 {
 public:
+    MockApplication()
+        : highlights(this->settings, &this->accounts)
+    {
+    }
+
     MockApplication(const QString &settingsData)
-        : mock::BaseApplication(settingsData, /*runMigrations*/ true)
+        : mock::BaseApplication(settingsData)
         , highlights(this->settings, &this->accounts)
     {
     }
@@ -162,7 +166,6 @@ public:
     mock::EmptyLogging logging;
     AccountController accounts;
     mock::EmoteController emotes;
-    mock::Helix helix;
     mock::UserDataController userData;
     mock::MockTwitchIrcServer twitch;
     mock::ChatterinoBadges chatterinoBadges;
@@ -565,21 +568,6 @@ public:
 
         this->mockApplication->twitch.mockChannels.emplace(
             "twitchdev", this->twitchdevChannel);
-
-        const auto helixExpectations =
-            this->snapshot->param("helixExpectations").toObject();
-        if (!helixExpectations.isEmpty())
-        {
-            initializeHelix(&this->mockHelix);
-
-            int nCalls =
-                helixExpectations.value("getSharedChatSession").toInt();
-            if (nCalls > 0)
-            {
-                EXPECT_CALL(this->mockHelix, getSharedChatSession)
-                    .Times(nCalls);
-            }
-        }
     }
 
     void TearDown() override
@@ -592,7 +580,6 @@ public:
     std::shared_ptr<TwitchChannel> twitchdevChannel;
     std::unique_ptr<MockApplication> mockApplication;
     std::unique_ptr<testlib::Snapshot> snapshot;
-    testing::StrictMock<mock::Helix> mockHelix;
 };
 
 /// This tests the process of parsing IRC messages and emitting `MessagePtr`s.
@@ -613,9 +600,6 @@ public:
 /// - `findAllUsernames`: A boolean controlling the equally named setting
 ///   (default: false)
 /// - `nAdditional`: Include n additional built messages (from `prevMessages`)
-/// - `helixExpectations`: An object with names of Helix API methods that will
-///   be called during the test and the expected call count. Name of the method
-///   is the key and the number of calls its value.
 TEST_P(TestIrcMessageHandlerP, Run)
 {
     auto channel = makeMockTwitchChannel(u"pajlada"_s, *snapshot);
@@ -708,4 +692,30 @@ TEST_P(TestIrcMessageHandlerP, CloneElements)
                 << QJsonDocument(clonedObj).toJson();
         }
     }
+}
+
+TEST(IrcNoticeSafety, MalformedUserListsDoNotCrashOrLoseFollowingNotices)
+{
+    MockApplication app;
+    auto channel = std::make_shared<TwitchChannel>("notice_test");
+    app.twitch.mockChannels.emplace("notice_test", channel);
+    auto &handler = IrcMessageHandler::instance();
+    for (const auto &line :
+         {QByteArray("@msg-id=room_mods :tmi.twitch.tv NOTICE #notice_test "
+                     ":missing separator"),
+          QByteArray(
+              "@msg-id=vips_success :tmi.twitch.tv NOTICE #notice_test :"),
+          QByteArray("@msg-id=room_mods :tmi.twitch.tv NOTICE #notice_test "
+                     ":Moderators: alice, bob"),
+          QByteArray(":tmi.twitch.tv NOTICE #notice_test :still connected")})
+    {
+        std::unique_ptr<Communi::IrcMessage> message(
+            Communi::IrcMessage::fromData(line, nullptr));
+        auto *notice = qobject_cast<Communi::IrcNoticeMessage *>(message.get());
+        ASSERT_NE(notice, nullptr);
+        handler.handleNoticeMessage(notice);
+    }
+    EXPECT_EQ(channel->getMessageSnapshot().size(), 4);
+    EXPECT_TRUE(channel->getMessageSnapshot()[3]->messageText.contains(
+        "still connected"));
 }

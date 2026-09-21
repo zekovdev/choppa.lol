@@ -8,9 +8,12 @@
 
 namespace chatterino {
 
-void _registerSetting(std::weak_ptr<pajlada::Settings::SettingData> setting)
+void _registerSetting(std::weak_ptr<pajlada::Settings::SettingData> setting,
+                      std::weak_ptr<bool> lifetime,
+                      SettingSnapshotFactory makeSnapshot)
 {
-    _actuallyRegisterSetting(std::move(setting));
+    _actuallyRegisterSetting(std::move(setting), std::move(lifetime),
+                             std::move(makeSnapshot));
 }
 
 }  // namespace chatterino

@@ -34,11 +34,12 @@ constexpr FlagsEnum<BaseWindow::Flags> POPUP_FLAGS_CLOSE_AUTOMATICALLY{
 
 }  // namespace
 
-DraggablePopup::DraggablePopup(bool closeAutomatically, QWidget *parent)
+DraggablePopup::DraggablePopup(bool closeAutomatically, QWidget *parent,
+                               FlagsEnum<Flags> extraFlags)
     : BaseWindow(
           (closeAutomatically ? POPUP_FLAGS_CLOSE_AUTOMATICALLY : POPUP_FLAGS) |
               BaseWindow::DisableLayoutSave |
-              BaseWindow::ClearBuffersOnDpiChange,
+              BaseWindow::ClearBuffersOnDpiChange | extraFlags,
           parent)
     , lifetimeHack_(std::make_shared<bool>(false))
     , closeAutomatically_(closeAutomatically)

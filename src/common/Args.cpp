@@ -91,51 +91,14 @@ std::optional<Args::Channel> parseActivateOption(QString input)
     };
 }
 
-std::vector<Args::Channel> parseCustomChannels(const QString &argValue)
-{
-    std::vector<Args::Channel> list;
-
-    QStringList channelArgList = argValue.split(";");
-    for (const QString &channelArg : channelArgList)
-    {
-        if (channelArg.isEmpty())
-        {
-            continue;
-        }
-
-        // Twitch is default platform
-        QString platform = "t";
-        QString channelName = channelArg;
-
-        const QRegularExpression regExp("(.):(.*)");
-        if (auto match = regExp.match(channelArg); match.hasMatch())
-        {
-            platform = match.captured(1);
-            channelName = match.captured(2);
-        }
-
-        // Twitch (default)
-        if (platform == "t")
-        {
-            list.push_back(Args::Channel{
-                .provider = ProviderId::Twitch,
-                .name = channelName,
-            });
-        }
-    }
-
-    list.shrink_to_fit();
-    return list;
-}
-
 }  // namespace
 
 namespace chatterino {
 
-Args::Args(const QApplication &app)
+Args::Args(const QApplication &app, const Paths &paths)
 {
     QCommandLineParser parser;
-    parser.setApplicationDescription("Chatterino 7TV Client for Twitch Chat");
+    parser.setApplicationDescription("choppa.lol desktop chat client");
     parser.addHelpOption();
 
     // Used internally by app to restart after unexpected crashes
@@ -155,14 +118,14 @@ Args::Args(const QApplication &app)
                                      "allowing you to see debug output.");
     // Safe mode
     QCommandLineOption safeModeOption(
-        "safe-mode", "Starts Chatterino without loading Plugins and always "
+        "safe-mode", "Starts choppa.lol without loading plugins and always "
                      "show the settings button.");
 
     QCommandLineOption loginOption(
         "login",
-        "Starts Chatterino logged in as the account matching the supplied "
+        "Starts choppa.lol logged in as the account matching the supplied "
         "username. If the supplied username does not match any account, "
-        "Chatterino starts logged in as anonymous.",
+        "choppa.lol starts logged in as anonymous.",
         "username");
 
     // Channel layout
@@ -188,12 +151,6 @@ Args::Args(const QApplication &app)
         "like you have to use this, please reach out to our issue tracker at "
         "https://github.com/Chatterino/chatterino2/issues");
 
-    QCommandLineOption portableEnable("portable", "Enable portable mode.");
-
-    QCommandLineOption portableDirectory(
-        "portable-dir", "Directory to use when portable mode is enabled.",
-        "directory");
-
 #ifndef NDEBUG
     QCommandLineOption useLocalEventsubOption(
         "use-local-eventsub",
@@ -213,8 +170,6 @@ Args::Args(const QApplication &app)
         channelLayout,
         activateOption,
         useOldScalingOption,
-        portableEnable,
-        portableDirectory,
 #ifndef NDEBUG
         useLocalEventsubOption,
 #endif
@@ -240,11 +195,7 @@ Args::Args(const QApplication &app)
 
     if (parser.isSet(channelLayout))
     {
-        this->customChannels = parseCustomChannels(parser.value(channelLayout));
-        if (!this->customChannels.empty())
-        {
-            this->dontSaveSettings = true;
-        }
+        this->applyCustomChannelLayout(parser.value(channelLayout), paths);
     }
 
     this->verbose = parser.isSet(verboseOption);
@@ -291,17 +242,6 @@ Args::Args(const QApplication &app)
         this->useOldScaling = true;
     }
 
-    if (parser.isSet(portableEnable))
-    {
-        this->portableEnable = true;
-    }
-
-    if (parser.isSet(portableDirectory))
-    {
-        this->portableDirectory =
-            QDir(parser.value(portableDirectory)).absolutePath();
-    }
-
 #ifndef NDEBUG
     if (parser.isSet(useLocalEventsubOption))
     {
@@ -323,14 +263,8 @@ QStringList Args::currentArguments() const
     return this->currentArguments_;
 }
 
-std::optional<WindowLayout> Args::makeCustomChannelLayout(
-    const QString &windowLayoutFile) const
+void Args::applyCustomChannelLayout(const QString &argValue, const Paths &paths)
 {
-    if (this->customChannels.empty())
-    {
-        return {};
-    }
-
     WindowLayout layout;
     WindowDescriptor window;
 
@@ -341,27 +275,21 @@ std::optional<WindowLayout> Args::makeCustomChannelLayout(
     window.type_ = WindowType::Main;
 
     // Load main window layout from config file so we can use the same geometry
-    const QRect configMainLayout = [windowLayoutFile] {
-        const auto configLayout = WindowLayout::loadFromFile(windowLayoutFile);
+    const QRect configMainLayout = [paths] {
+        const QString windowLayoutFile = combinePath(
+            paths.settingsDirectory, WindowManager::WINDOW_LAYOUT_FILENAME);
 
-        if (configLayout)
+        const WindowLayout configLayout =
+            WindowLayout::loadFromFile(windowLayoutFile);
+
+        for (const WindowDescriptor &window : configLayout.windows_)
         {
-            for (const WindowDescriptor &window : configLayout->windows_)
+            if (window.type_ != WindowType::Main)
             {
-                if (window.type_ != WindowType::Main)
-                {
-                    continue;
-                }
-
-                return window.geometry_;
+                continue;
             }
-        }
-        else
-        {
-            qCWarning(chatterinoWindowmanager)
-                << "Missing previous main window position as window layout "
-                   "failed to load:"
-                << configLayout.error();
+
+            return window.geometry_;
         }
 
         return QRect(-1, -1, -1, -1);
@@ -369,24 +297,49 @@ std::optional<WindowLayout> Args::makeCustomChannelLayout(
 
     window.geometry_ = configMainLayout;
 
-    for (const Channel &channel : this->customChannels)
+    QStringList channelArgList = argValue.split(";");
+    for (const QString &channelArg : channelArgList)
     {
-        assert(channel.provider == ProviderId::Twitch);
+        if (channelArg.isEmpty())
+        {
+            continue;
+        }
 
-        TabDescriptor tab = {
-            .selected_ = window.tabs_.empty(),
-            .rootNode_ = SplitNodeDescriptor{{
+        // Twitch is default platform
+        QString platform = "t";
+        QString channelName = channelArg;
+
+        const QRegularExpression regExp("(.):(.*)");
+        if (auto match = regExp.match(channelArg); match.hasMatch())
+        {
+            platform = match.captured(1);
+            channelName = match.captured(2);
+        }
+
+        // Twitch (default)
+        if (platform == "t")
+        {
+            TabDescriptor tab;
+
+            // Set first tab as selected
+            tab.selected_ = window.tabs_.empty();
+            tab.rootNode_ = SplitNodeDescriptor{{
                 .type_ = "twitch",
-                .channelName_ = channel.name,
-            }},
-        };
+                .channelName_ = channelName,
+            }};
 
-        window.tabs_.emplace_back(std::move(tab));
+            window.tabs_.emplace_back(std::move(tab));
+        }
     }
 
-    layout.windows_.emplace_back(std::move(window));
+    // Only respect --channels if we could actually parse any channels
+    if (!window.tabs_.empty())
+    {
+        this->dontSaveSettings = true;
 
-    return layout;
+        layout.windows_.emplace_back(std::move(window));
+        this->customChannelLayout = std::move(layout);
+    }
 }
 
 }  // namespace chatterino

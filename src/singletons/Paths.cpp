@@ -4,7 +4,6 @@
 
 #include "singletons/Paths.hpp"
 
-#include "common/Args.hpp"
 #include "common/Modes.hpp"
 #include "singletons/Settings.hpp"
 #include "util/CombinePath.hpp"
@@ -20,17 +19,23 @@ using namespace std::literals;
 
 namespace chatterino {
 
-Paths::Paths(const Args &args, const Modes &modes)
+Paths::Paths()
 {
     this->initAppFilePathHash();
 
-    this->initRootDirectory(args, modes);
+    this->initCheckPortable();
+    this->initRootDirectory();
     this->initSubDirectories();
 }
 
 bool Paths::createFolder(const QString &folderPath)
 {
     return QDir().mkpath(folderPath);
+}
+
+bool Paths::isPortable() const
+{
+    return Modes::instance().isPortable;
 }
 
 QString Paths::cacheDirectory() const
@@ -75,18 +80,23 @@ void Paths::initAppFilePathHash()
             .replace("/", "x");
 }
 
-void Paths::initRootDirectory(const Args &args, const Modes &modes)
+void Paths::initCheckPortable()
 {
+    this->portable_ = QFileInfo::exists(
+        combinePath(QCoreApplication::applicationDirPath(), "portable"));
+}
+
+void Paths::initRootDirectory()
+{
+    assert(this->portable_.has_value());
+
+    // Root path = %APPDATA%/Chatterino or the folder that the executable
+    // resides in
+
     this->rootAppDataDirectory = [&]() -> QString {
         // portable
-        if (modes.isPortable)
+        if (Modes::instance().isPortable)
         {
-            // override
-            if (args.portableDirectory.has_value())
-            {
-                return args.portableDirectory.value();
-            }
-
             return QCoreApplication::applicationDirPath();
         }
 

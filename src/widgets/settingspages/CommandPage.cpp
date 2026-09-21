@@ -134,7 +134,7 @@ CommandPage::CommandPage()
 
     QLabel *text = layout.emplace<QLabel>(HELP_TEXT).getElement();
     text->setWordWrap(true);
-    text->setStyleSheet("color: #bbb");
+    text->setStyleSheet("color: #8a8a93");
     text->setOpenExternalLinks(true);
 
     auto *duplicateWarning =
