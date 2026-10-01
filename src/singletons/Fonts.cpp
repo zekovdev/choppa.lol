@@ -9,7 +9,9 @@
 #include "singletons/Settings.hpp"
 #include "singletons/WindowManager.hpp"
 
+#include <QApplication>
 #include <QDebug>
+#include <QFontDatabase>
 #include <QtGlobal>
 
 namespace {
@@ -110,7 +112,7 @@ int fontWeight(FontStyle style)
         case FontStyle::UiMedium:
         case FontStyle::UiTabs:
         case FontStyle::EndType:
-            return QFont::Normal;
+            return QFont::Bold;
 
         case FontStyle::UiMediumBold:
             return QFont::Bold;
@@ -167,7 +169,7 @@ QString fontFamily(FontStyle style)
         case FontStyle::UiMediumBold:
         case FontStyle::UiTabs:
         case FontStyle::EndType:
-            return QStringLiteral(DEFAULT_FONT_FAMILY);
+            return QStringLiteral("Satoshi");
     }
 
     assert(false);
@@ -180,6 +182,17 @@ namespace chatterino {
 
 Fonts::Fonts(Settings &settings)
 {
+    static const bool fontsLoaded = [] {
+        QFontDatabase::addApplicationFont(":/choppa/Satoshi-Bold.ttf");
+        QFont uiFont("Satoshi", 10);
+        uiFont.setWeight(QFont::Bold);
+        uiFont.setStyleStrategy(QFont::StyleStrategy(QFont::PreferAntialias |
+                                                     QFont::PreferQuality));
+        uiFont.setHintingPreference(QFont::PreferDefaultHinting);
+        QApplication::setFont(uiFont);
+        return true;
+    }();
+    (void)fontsLoaded;
     this->fontsByType_.resize(size_t(FontStyle::EndType));
 
     this->fontChangedListener.setCB([this] {
@@ -239,6 +252,9 @@ Fonts::FontData Fonts::createFontData(FontStyle type, float scale)
         fontWeight(type),
         isItalic(type),
     };
+    font.setStyleStrategy(
+        QFont::StyleStrategy(QFont::PreferAntialias | QFont::PreferQuality));
+    font.setHintingPreference(QFont::PreferDefaultHinting);
 
     switch (type)
     {

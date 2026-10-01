@@ -349,6 +349,12 @@ public:
         return {this->buffer_.begin(), this->buffer_.end()};
     }
 
+    void UpdateSnapshot(std::vector<T> &Snapshot) const
+    {
+        std::shared_lock Lock(this->mutex_);
+        Snapshot.assign(this->buffer_.begin(), this->buffer_.end());
+    }
+
     [[nodiscard]] std::vector<T> lastN(size_t nItems) const
     {
         std::shared_lock lock(this->mutex_);

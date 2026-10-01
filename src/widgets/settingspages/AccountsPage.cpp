@@ -14,6 +14,7 @@
 
 #include <QDialogButtonBox>
 #include <QHeaderView>
+#include <QLabel>
 #include <QTableView>
 #include <QVBoxLayout>
 
@@ -27,6 +28,13 @@ AccountsPage::AccountsPage()
 
     LayoutCreator<AccountsPage> layoutCreator(this);
     auto layout = layoutCreator.emplace<QVBoxLayout>().withoutMargin();
+    auto *description =
+        new QLabel(tr("Connect your Twitch account to send messages, receive "
+                      "your mentions and check live channels. Your imported "
+                      "channels are already available."));
+    description->setWordWrap(true);
+    description->setObjectName("description");
+    layout->addWidget(description);
 
     EditableModelView *view =
         layout
@@ -42,8 +50,6 @@ AccountsPage::AccountsPage()
         LoginDialog d(this);
         d.exec();
     });
-
-    view->getTableView()->setStyleSheet("background: #333");
 
     //    auto buttons = layout.emplace<QDialogButtonBox>();
     //    {

@@ -39,11 +39,10 @@ namespace chatterino {
 class Application;
 class Paths;
 class Channel;
-class Modes;
 
 using ChannelPtr = std::shared_ptr<Channel>;
 
-void registerNmHost(const Modes &modes, const Paths &paths);
+void registerNmHost(const Paths &paths);
 std::string &getNmQueueName(const Paths &paths);
 
 Atomic<std::optional<QString>> &nmIpcError();

@@ -50,9 +50,9 @@ bool FilterSet::filter(const MessagePtr &m, ChannelPtr channel) const
         .message = *m,
         .channel = channel.get(),
     };
-    for (const auto &f : this->filters_.values())
+    for (const auto &Filter : this->filters_)
     {
-        if (!f->valid() || !f->filter(ctx))
+        if (!Filter->valid() || !Filter->filter(ctx))
         {
             return false;
         }

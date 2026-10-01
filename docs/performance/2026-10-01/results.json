@@ -1,0 +1,80 @@
+{
+  "Date": "2026-10-01",
+  "BaselineCommit": "2e8e2fa48107bdc77e8b43ce02a232c7a0ac86f9",
+  "Platform": "Windows x64, MSVC Release, Qt 6.8.3, offscreen raster rendering",
+  "Before": {
+    "Burst2000UiMs": 100.8393,
+    "BurstFlushMs": 3.8691,
+    "FourViewsPaintMedianMs": 0.2081,
+    "FourViewsPaintP95Ms": 0.3208,
+    "FourViewsScrollMedianMs": 2.8539,
+    "FourViewsScrollP95Ms": 3.4918,
+    "HistoryPerView": 1000,
+    "Snapshot10000Ms": 58.1556,
+    "Views": 4
+  },
+  "AfterTrials": [
+    {
+      "Burst2000UiMs": 1.0108,
+      "BurstFlushMs": 4.1659,
+      "FourViewsPaintMedianMs": 0.1652,
+      "FourViewsPaintP95Ms": 0.2377,
+      "FourViewsScrollMedianMs": 2.7969,
+      "FourViewsScrollP95Ms": 3.3404,
+      "HistoryPerView": 1000,
+      "Snapshot10000Ms": 0.0146,
+      "Views": 4
+    },
+    {
+      "Burst2000UiMs": 1.1161,
+      "BurstFlushMs": 4.5884,
+      "FourViewsPaintMedianMs": 0.1712,
+      "FourViewsPaintP95Ms": 0.23,
+      "FourViewsScrollMedianMs": 2.8135,
+      "FourViewsScrollP95Ms": 3.4835,
+      "HistoryPerView": 1000,
+      "Snapshot10000Ms": 0.0148,
+      "Views": 4
+    },
+    {
+      "Burst2000UiMs": 1.104,
+      "BurstFlushMs": 4.3172,
+      "FourViewsPaintMedianMs": 0.1806,
+      "FourViewsPaintP95Ms": 0.2233,
+      "FourViewsScrollMedianMs": 2.7934,
+      "FourViewsScrollP95Ms": 3.3854,
+      "HistoryPerView": 1000,
+      "Snapshot10000Ms": 0.0146,
+      "Views": 4
+    }
+  ],
+  "CompletionBefore": {
+    "CompletionMedianMs": 3.1321,
+    "CompletionP95Ms": 3.8391,
+    "Emotes": 4000
+  },
+  "CompletionAfterTrials": [
+    {
+      "CompletionMedianMs": 1.4397,
+      "CompletionP95Ms": 1.651,
+      "Emotes": 4000
+    },
+    {
+      "CompletionMedianMs": 1.4303,
+      "CompletionP95Ms": 1.6965,
+      "Emotes": 4000
+    },
+    {
+      "CompletionMedianMs": 1.4026,
+      "CompletionP95Ms": 1.5141,
+      "Emotes": 4000
+    }
+  ],
+  "LocalTests": 611,
+  "UiScales": [
+    1,
+    1.25,
+    1.5,
+    2
+  ]
+}

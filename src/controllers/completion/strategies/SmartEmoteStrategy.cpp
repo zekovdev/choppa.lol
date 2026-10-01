@@ -76,7 +76,8 @@ int costOfEmote(QStringView query, QStringView emote, bool prioritizeUpper)
 void completeEmotes(
     const std::vector<EmoteItem> &items, std::vector<EmoteItem> &output,
     QStringView query, bool ignoreColonForCost, bool ignoreTildeForCost,
-    const std::function<bool(EmoteItem, Qt::CaseSensitivity)> &matchingFunction)
+    const std::function<bool(const EmoteItem &, Qt::CaseSensitivity)>
+        &matchingFunction)
 {
     // Given these emotes: pajaW, PAJAW
     // There are a few cases of input:
@@ -135,39 +136,46 @@ void completeEmotes(
         }
     }
 
-    std::sort(output.begin(), output.end(),
-              [query, prioritizeUpper, ignoreColonForCost, ignoreTildeForCost](
-                  const EmoteItem &a, const EmoteItem &b) -> bool {
-                  auto tempA = a.searchName;
-                  auto tempB = b.searchName;
-                  if (ignoreColonForCost && tempA.startsWith(":"))
-                  {
-                      tempA = tempA.mid(1);
-                  }
-                  if (ignoreTildeForCost && tempA.startsWith("~"))
-                  {
-                      tempA = tempA.mid(1);
-                  }
-                  if (ignoreColonForCost && tempB.startsWith(":"))
-                  {
-                      tempB = tempB.mid(1);
-                  }
-                  if (ignoreTildeForCost && tempB.startsWith("~"))
-                  {
-                      tempB = tempB.mid(1);
-                  }
-
-                  auto costA = costOfEmote(query, tempA, prioritizeUpper);
-                  auto costB = costOfEmote(query, tempB, prioritizeUpper);
-                  if (costA == costB)
-                  {
-                      // Case difference and length came up tied for (a, b), break the tie
-                      return QString::compare(tempA, tempB,
-                                              Qt::CaseInsensitive) < 0;
-                  }
-
-                  return costA < costB;
+    struct RankedEmote {
+        size_t Source;
+        int Cost;
+        QStringView Name;
+    };
+    std::vector<RankedEmote> Ranked;
+    Ranked.reserve(output.size());
+    for (size_t Index = 0; Index < output.size(); ++Index)
+    {
+        QStringView Name = output[Index].searchName;
+        if (ignoreColonForCost && Name.startsWith(QLatin1Char(':')))
+            Name = Name.mid(1);
+        if (ignoreTildeForCost && Name.startsWith(QLatin1Char('~')))
+            Name = Name.mid(1);
+        Ranked.push_back(
+            {Index, costOfEmote(query, Name, prioritizeUpper), Name});
+    }
+    std::sort(Ranked.begin(), Ranked.end(),
+              [](const RankedEmote &Left, const RankedEmote &Right) {
+                  if (Left.Cost == Right.Cost)
+                      return Left.Name.compare(Right.Name,
+                                               Qt::CaseInsensitive) < 0;
+                  return Left.Cost < Right.Cost;
               });
+    for (size_t Index = 0; Index < Ranked.size(); ++Index)
+    {
+        if (Ranked[Index].Source == Index)
+            continue;
+        auto Item = std::move(output[Index]);
+        auto Position = Index;
+        while (Ranked[Position].Source != Index)
+        {
+            const auto Next = Ranked[Position].Source;
+            output[Position] = std::move(output[Next]);
+            Ranked[Position].Source = Position;
+            Position = Next;
+        }
+        output[Position] = std::move(Item);
+        Ranked[Position].Source = Position;
+    }
 }
 }  // namespace
 
@@ -176,8 +184,7 @@ void SmartEmoteStrategy::apply(const std::vector<EmoteItem> &items,
                                const QString &query) const
 {
     qCDebug(LOG) << "SmartEmoteStrategy apply" << query;
-    std::vector<EmoteItem> filteredItems = items;
-    QString normalizedQuery = query;
+    QStringView normalizedQuery = query;
     bool ignoreColonForCost = false;
     bool zeroWidthOnly = false;
     if (normalizedQuery.startsWith(':'))
@@ -189,21 +196,15 @@ void SmartEmoteStrategy::apply(const std::vector<EmoteItem> &items,
     {
         normalizedQuery = normalizedQuery.mid(1);
         zeroWidthOnly = true;
-
-        auto [first, last] = std::ranges::remove_if(
-            filteredItems, [](const EmoteItem &emoteItem) {
-                return !emoteItem.emote->zeroWidth;
-            });
-        filteredItems.erase(first, last);
     }
 
-    completeEmotes(filteredItems, output, normalizedQuery, ignoreColonForCost,
-                   zeroWidthOnly,
-                   [normalizedQuery](const EmoteItem &left,
-                                     Qt::CaseSensitivity caseHandling) {
-                       return left.searchName.contains(normalizedQuery,
-                                                       caseHandling);
-                   });
+    completeEmotes(
+        items, output, normalizedQuery, ignoreColonForCost, zeroWidthOnly,
+        [normalizedQuery, zeroWidthOnly](const EmoteItem &left,
+                                         Qt::CaseSensitivity caseHandling) {
+            return (!zeroWidthOnly || left.emote->zeroWidth) &&
+                   left.searchName.contains(normalizedQuery, caseHandling);
+        });
 }
 
 void SmartTabEmoteStrategy::apply(const std::vector<EmoteItem> &items,

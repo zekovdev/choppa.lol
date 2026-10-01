@@ -273,3 +273,24 @@ TEST(LimitedQueue, FirstN)
     SNAPSHOT_EQUALS(empty.firstN(2), {}, "empty");
     SNAPSHOT_EQUALS(empty.firstN(6), {}, "empty");
 }
+
+TEST(LimitedQueue, SnapshotReflectsWrappedQueueAndReusesStorage)
+{
+    LimitedQueue<int> Queue(3);
+    std::vector<int> Snapshot;
+    Snapshot.reserve(3);
+    const auto *Storage = Snapshot.data();
+    for (int Index = 1; Index <= 5; ++Index)
+        Queue.pushBack(Index);
+    Queue.UpdateSnapshot(Snapshot);
+    EXPECT_EQ(Snapshot, (std::vector<int>{3, 4, 5}));
+    EXPECT_EQ(Snapshot.data(), Storage);
+    Queue.replaceItem(size_t{1}, 6);
+    Queue.UpdateSnapshot(Snapshot);
+    EXPECT_EQ(Snapshot, (std::vector<int>{3, 6, 5}));
+    EXPECT_EQ(Snapshot.data(), Storage);
+    Queue.clear();
+    Queue.UpdateSnapshot(Snapshot);
+    EXPECT_TRUE(Snapshot.empty());
+    EXPECT_EQ(Snapshot.capacity(), 3);
+}

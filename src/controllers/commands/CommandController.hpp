@@ -37,7 +37,7 @@ public:
     QStringList getDefaultChatterinoCommandList();
 
     CommandController(const Paths &paths);
-    void save();
+    pajlada::Settings::SettingManager::SaveResult save();
 
     CommandModel *createModel(QObject *parent);
 

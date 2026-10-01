@@ -80,6 +80,17 @@
                     "type": "BadgeElement"
                 },
                 {
+                    "flags": "BadgeSevenTV",
+                    "link": {
+                        "type": "None",
+                        "value": ""
+                    },
+                    "tooltip": "",
+                    "trailingSpace": true,
+                    "type": "SeventvBadgeElement",
+                    "userID": "143114011"
+                },
+                {
                     "color": "#ff0000ff",
                     "flags": "Username",
                     "link": {
@@ -178,8 +189,7 @@
                     "url": ""
                 }
             ],
-            "externalBadges": [
-            ],
+            "externalBadges": [],
             "flags": "Collapsed|CheerMessage",
             "frozen": false,
             "id": "fd6c5507-3a4e-4d24-8f6e-fadf07f520d3",
@@ -189,8 +199,7 @@
             "searchText": "slyckity  slyckity: Cheer1 a Cheer1 Cheer1 Cheer1 Cheer1 b c ",
             "serverReceivedTime": "2019-09-07T02:44:33Z",
             "timeoutUser": "",
-            "twitchBadgeInfos": {
-            },
+            "twitchBadgeInfos": {},
             "twitchBadges": [
                 "bits-leader"
             ],

@@ -108,7 +108,8 @@ ModerationPage::ModerationPage()
                 logsPathLabel->setText(pathShortened + logExplanation);
                 logsPathLabel->setToolTip(pathOriginal);
                 logsPathLabel->setWordWrap(true);
-            });
+            },
+            this->managedConnections_);
 
         logsPathLabel->setTextFormat(Qt::RichText);
         logsPathLabel->setTextInteractionFlags(Qt::TextBrowserInteraction |
@@ -124,7 +125,8 @@ ModerationPage::ModerationPage()
         getSettings()->logPath.connect(
             [element = resetDir.getElement()](const QString &path) {
                 element->setEnabled(!path.isEmpty());
-            });
+            },
+            this->managedConnections_);
 
         buttons->addStretch();
 
@@ -242,7 +244,7 @@ ModerationPage::ModerationPage()
             "More information can be found <a href='https://wiki.chatterino.com/Moderation/#moderation-mode'>here</a>.");
         label->setOpenExternalLinks(true);
         label->setWordWrap(true);
-        label->setStyleSheet("color: #bbb");
+        label->setStyleSheet("color: #8a8a93");
         // clang-format on
 
         //        auto form = modMode.emplace<QFormLayout>();

@@ -287,31 +287,29 @@ protected:
     std::unique_ptr<mock::BaseApplication> app;
 };
 
-TEST_F(ImageUploaderTest, ImportClearsMissingOptionalSettings)
-{
-    this->configure();
-
-    auto &settings = *getSettings();
-    settings.imageUploaderHeaders = "Authorization: Bearer ugandan-key";
-    settings.imageUploaderDeletionLink =
-        "https://old.example/delete/{delete-key}";
-
-    const QJsonObject importedSettings{
-        {"Version", "1.0.0"},
-        {"RequestURL", "https://new.example/upload"},
-        {"FileFormName", "file"},
-        {"URL", "{response}"},
-    };
-
-    ASSERT_TRUE(importSettings(importedSettings, settings));
-    EXPECT_TRUE(settings.imageUploaderHeaders.getValue().isEmpty());
-    EXPECT_TRUE(settings.imageUploaderDeletionLink.getValue().isEmpty());
-}
-
 class ImportTest : public ImageUploaderTest,
                    public ::testing::WithParamInterface<QString>
 {
 };
+
+TEST_F(ImageUploaderTest, ImportClearsPreviousProviderOptions)
+{
+    this->configure();
+    auto &Settings = *getSettings();
+    Settings.imageUploaderHeaders = "Authorization: previous-provider";
+    Settings.imageUploaderDeletionLink = "https://previous.example/delete";
+
+    EXPECT_TRUE(
+        detail::importSettings({{"RequestURL", "https://next.example/upload"},
+                                {"FileFormName", "file"},
+                                {"URL", "{url}"}},
+                               Settings));
+    EXPECT_TRUE(Settings.imageUploaderHeaders.getValue().isEmpty());
+    EXPECT_TRUE(Settings.imageUploaderDeletionLink.getValue().isEmpty());
+    EXPECT_EQ(Settings.imageUploaderUrl.getValue(),
+              "https://next.example/upload");
+}
+
 TEST_P(ImportTest, Run)
 {
     auto fixture = testlib::Snapshot::read("ImageUploader/Import", GetParam());

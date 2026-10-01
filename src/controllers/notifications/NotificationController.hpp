@@ -37,7 +37,6 @@ public:
 
     struct NotificationPayload {
         QString channelId;
-        QString streamId;
         QString channelName;
         QString displayName;
         QString title;
@@ -46,8 +45,8 @@ public:
 
     /// @brief Sends out notifications for a channel that has gone live
     ///
-    /// Duplicate calls for the same stream have no effect
-    void notifyTwitchChannelLive(const NotificationPayload &payload);
+    /// This doesn't check for duplicate notifications.
+    void notifyTwitchChannelLive(const NotificationPayload &payload) const;
 
     /// @brief Sends out notifications for a channel that has gone offline
     ///
@@ -74,9 +73,6 @@ private:
     /// These channels won't be tracked in LiveController.
     /// Channels are identified by their login name (case insensitive).
     std::map<QString, FakeChannel, QCompareCaseInsensitive> fakeChannels_;
-
-    /// Maps channel IDs to their most recently notified stream IDs
-    std::map<QString, QString> lastNotifiedStreamIds_;
 
     QTimer liveStatusTimer_;
 

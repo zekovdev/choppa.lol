@@ -4,8 +4,10 @@
 
 #pragma once
 
+#include <pajlada/signals/signalholder.hpp>
 #include <QFile>
 #include <QString>
+#include <QTimer>
 
 #include <memory>
 
@@ -44,6 +46,8 @@ private:
     QString currentStreamID;
 
     QString dateString;
+    QTimer FlushTimer;
+    pajlada::Signals::SignalHolder LogConnections;
 
     friend class Logging;
 };

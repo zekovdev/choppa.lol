@@ -154,6 +154,17 @@
                     "type": "BadgeElement"
                 },
                 {
+                    "flags": "BadgeSevenTV",
+                    "link": {
+                        "type": "None",
+                        "value": ""
+                    },
+                    "tooltip": "",
+                    "trailingSpace": true,
+                    "type": "SeventvBadgeElement",
+                    "userID": "84180052"
+                },
+                {
                     "color": "#ff0096cc",
                     "flags": "Username",
                     "link": {
@@ -197,8 +208,7 @@
                     "url": ""
                 }
             ],
-            "externalBadges": [
-            ],
+            "externalBadges": [],
             "flags": "Collapsed",
             "frozen": false,
             "id": "dddbcb38-5c8e-4381-8050-d687ff9564ef",

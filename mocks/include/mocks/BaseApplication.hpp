@@ -19,26 +19,24 @@ namespace chatterino::mock {
 class BaseApplication : public EmptyApplication
 {
 public:
-    BaseApplication(bool runMigrations = false)
-        : settings(this->modes_, this->args_, this->settingsDir.path(),
+    BaseApplication()
+        : settings(this->args_, this->settingsDir.path(),
                    {
                        .isTest = true,
-                       .runMigrations = runMigrations,
                    })
-        , updates(this->modes_, this->paths_, this->settings)
+        , updates(this->paths_, this->settings)
         , theme(this->paths_)
         , fonts(this->settings)
     {
     }
 
-    BaseApplication(const QString &settingsData, bool runMigrations = false)
+    explicit BaseApplication(const QString &settingsData)
         : EmptyApplication(settingsData)
-        , settings(this->modes_, this->args_, this->settingsDir.path(),
+        , settings(this->args_, this->settingsDir.path(),
                    {
                        .isTest = true,
-                       .runMigrations = runMigrations,
                    })
-        , updates(this->modes_, this->paths_, this->settings)
+        , updates(this->paths_, this->settings)
         , theme(this->paths_)
         , fonts(this->settings)
     {

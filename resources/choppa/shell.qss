@@ -1,0 +1,34 @@
+/* Compact desktop navigation. */
+QWidget#choppaShell { background: #0a0a0a; color: #eeeeee; font-family: 'Satoshi'; font-size: 12px; font-weight: 700; }
+QWidget#choppaSidebar, QWidget#choppaTitlebar { background: #0a0a0a; }
+QWidget#choppaShell QLabel { color: #eeeeee; background: transparent; border: none; }
+QWidget#choppaShell QLabel#brand { color: #eeeeee; font-size: 20px; font-weight: 700; }
+QWidget#choppaShell QLabel#heading { color: #eeeeee; font-size: 13px; font-weight: 700; }
+QWidget#choppaShell QLabel#muted { color: #a0a0a0; font-size: 12px; }
+QWidget#choppaShell QLabel#section { color: #888888; font-size: 11px; padding: 8px 10px 4px; }
+QWidget#choppaShell QPushButton { color: #eeeeee; background: #111111; border: 1px solid transparent; border-radius: 6px; padding: 4px 8px; font-family: 'Satoshi'; font-size: 12px; text-align: left; }
+QWidget#choppaShell QPushButton#account { border: 1px solid #242424; padding: 8px; text-align: left; }
+QWidget#choppaShell QPushButton:hover { background: #292929; color: #eeeeee; }
+QWidget#choppaShell QPushButton:pressed { background: #202020; }
+QWidget#choppaShell QPushButton:focus { border-color: #888888; }
+QWidget#choppaShell QPushButton:disabled { color: #707070; }
+QWidget#choppaShell QPushButton#primary { background: #d6d6d6; color: #0a0a0a; }
+QWidget#choppaShell QPushButton#primary:hover { background: #eeeeee; }
+QWidget#choppaShell QPushButton#nav { background: transparent; }
+QWidget#choppaShell QPushButton#nav:hover, QWidget#choppaShell QPushButton#nav:checked { background: #111111; color: #eeeeee; }
+QWidget#choppaShell QPushButton#windowControl { background: transparent; padding: 0; border: none; border-radius: 6px; text-align: center; }
+QWidget#choppaShell QPushButton#windowControl:hover { background: #1a1a1a; }
+QWidget#choppaShell QPushButton#closeControl { background: transparent; padding: 0; text-align: center; }
+QWidget#choppaShell QPushButton#closeControl:hover { background: #b32d3b; color: white; }
+QWidget#choppaShell QLineEdit { background: #111111; border: 1px solid #242424; border-radius: 6px; color: #eeeeee; padding: 6px 8px; selection-background-color: #333333; }
+QWidget#choppaShell QLineEdit:focus { border-color: #888888; }
+QWidget#choppaShell QListWidget { border: none; outline: none; background: transparent; color: white; }
+QWidget#choppaShell QScrollBar:vertical { background: transparent; width: 5px; margin: 0; }
+QWidget#choppaShell QScrollBar::handle:vertical { background: #333333; min-height: 28px; border-radius: 2px; }
+QWidget#choppaShell QScrollBar::add-line:vertical, QWidget#choppaShell QScrollBar::sub-line:vertical { height: 0; }
+QWidget#choppaShell QScrollBar::add-page:vertical, QWidget#choppaShell QScrollBar::sub-page:vertical { background: transparent; }
+
+QMenu { background: #111111; color: #eeeeee; border: 1px solid #242424; padding: 6px; }
+QMenu::item { padding: 8px 20px; border-radius: 6px; }
+QMenu::item:selected { background: #242424; color: white; }
+QMenu::separator { height: 1px; background: #242424; margin: 4px 8px; }

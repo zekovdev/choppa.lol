@@ -71,8 +71,7 @@
                     ]
                 }
             ],
-            "externalBadges": [
-            ],
+            "externalBadges": [],
             "flags": "System|Timeout|DoNotTriggerNotification|ModerationAction",
             "frozen": false,
             "id": "",
@@ -82,10 +81,8 @@
             "searchText": "twitchdev has been timed out for 10m. (3 times) ",
             "serverReceivedTime": "2025-01-15T19:22:47Z",
             "timeoutUser": "twitchdev",
-            "twitchBadgeInfos": {
-            },
-            "twitchBadges": [
-            ],
+            "twitchBadgeInfos": {},
+            "twitchBadges": [],
             "userID": "",
             "usernameColor": "#ff000000"
         },
@@ -147,6 +144,17 @@
                     "type": "TwitchModerationElement"
                 },
                 {
+                    "flags": "BadgeSevenTV",
+                    "link": {
+                        "type": "None",
+                        "value": ""
+                    },
+                    "tooltip": "",
+                    "trailingSpace": true,
+                    "type": "SeventvBadgeElement",
+                    "userID": "141981764"
+                },
+                {
                     "color": "#ffff0000",
                     "flags": "Username",
                     "link": {
@@ -190,8 +198,7 @@
                     "url": ""
                 }
             ],
-            "externalBadges": [
-            ],
+            "externalBadges": [],
             "flags": "Collapsed",
             "frozen": false,
             "id": "aa1baade-c9c7-4932-b518-07c6b0226914",
@@ -201,10 +208,8 @@
             "searchText": "twitchdev  twitchdev: 1 ",
             "serverReceivedTime": "2025-01-15T19:22:45Z",
             "timeoutUser": "",
-            "twitchBadgeInfos": {
-            },
-            "twitchBadges": [
-            ],
+            "twitchBadgeInfos": {},
+            "twitchBadges": [],
             "userID": "141981764",
             "usernameColor": "#ffff0000"
         }

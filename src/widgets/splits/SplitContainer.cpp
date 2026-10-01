@@ -656,25 +656,44 @@ void SplitContainer::paintEvent(QPaintEvent * /*event*/)
     {
         painter.fillRect(this->rect(), this->theme->splits.background);
 
-        painter.setPen(this->theme->splits.header.text);
-
-        const auto font =
-            getApp()->getFonts()->getFont(FontStyle::ChatMedium, this->scale());
+        const auto scale = this->scale();
+        const auto center = this->rect().center();
+        painter.setRenderHint(QPainter::Antialiasing);
+        const QRectF icon(center.x() - 28 * scale, center.y() - 110 * scale,
+                          56 * scale, 56 * scale);
+        painter.setPen(Qt::NoPen);
+        painter.setBrush(this->theme->splits.input.background);
+        painter.drawRoundedRect(icon, 8 * scale, 8 * scale);
+        painter.setPen(QPen(this->theme->window.text, 1.5 * scale));
+        painter.setBrush(Qt::NoBrush);
+        painter.drawRoundedRect(
+            icon.adjusted(15 * scale, 16 * scale, -15 * scale, -16 * scale),
+            4 * scale, 4 * scale);
+        painter.drawLine(
+            QPointF(icon.left() + 20 * scale, icon.bottom() - 16 * scale),
+            QPointF(icon.left() + 17 * scale, icon.bottom() - 11 * scale));
+        auto font = getApp()->getFonts()->getFont(FontStyle::UiMedium, scale);
+        font.setPixelSize(int(24 * scale));
         painter.setFont(font);
-
-        QString text = "Click to add a split";
-
-        auto *notebook = dynamic_cast<Notebook *>(this->parentWidget());
-
-        if (notebook != nullptr)
-        {
-            if (notebook->getPageCount() > 1)
-            {
-                text += "\n\nAfter adding hold <Ctrl+Alt> to move or split it.";
-            }
-        }
-
-        painter.drawText(this->rect(), text, QTextOption(Qt::AlignCenter));
+        painter.setPen(this->theme->window.text);
+        painter.drawText(QRect(12, center.y() - int(38 * scale),
+                               this->width() - 24, int(40 * scale)),
+                         Qt::AlignCenter, "A space for every conversation.");
+        font.setPixelSize(int(14 * scale));
+        painter.setFont(font);
+        painter.setPen(this->theme->messages.textColors.system);
+        painter.drawText(
+            QRect(12, center.y() + int(4 * scale), this->width() - 24,
+                  int(44 * scale)),
+            Qt::AlignHCenter | Qt::AlignTop | Qt::TextWordWrap,
+            "Open a Twitch channel. Your emotes and community are right here.");
+        const QRectF action(center.x() - 92 * scale, center.y() + 64 * scale,
+                            184 * scale, 40 * scale);
+        painter.setPen(Qt::NoPen);
+        painter.setBrush(this->theme->accent);
+        painter.drawRoundedRect(action, 8 * scale, 8 * scale);
+        painter.setPen(this->theme->window.background);
+        painter.drawText(action, Qt::AlignCenter, "+  Open a channel");
     }
     else
     {
@@ -816,8 +835,7 @@ void SplitContainer::applyFromDescriptor(const NodeDescriptor &rootNode)
 
 void SplitContainer::popup()
 {
-    Window &window =
-        getApp()->getWindows()->createWindow(WindowType::Popup, {});
+    Window &window = getApp()->getWindows()->createWindow(WindowType::Popup);
     auto *popupContainer = window.getNotebook().getOrAddSelectedPage();
 
     QJsonObject encodedTab;
@@ -842,14 +860,44 @@ void SplitContainer::popup()
     window.show();
 }
 
+QString channelTypeToString(Channel::Type value) noexcept
+{
+    using Type = chatterino::Channel::Type;
+    switch (value)
+    {
+        default:
+            assert(false && "value cannot be serialized");
+            return "never";
+
+        case Type::Twitch:
+            return "twitch";
+        case Type::TwitchWhispers:
+            return "whispers";
+        case Type::TwitchWatching:
+            return "watching";
+        case Type::TwitchMentions:
+            return "mentions";
+        case Type::TwitchLive:
+            return "live";
+        case Type::TwitchAutomod:
+            return "automod";
+        case Type::Misc:
+            return "misc";
+    }
+}
+
 NodeDescriptor SplitContainer::buildDescriptorRecursively(
     const Node *currentNode) const
 {
-    if (currentNode->children_.empty() && currentNode->split_)
+    if (currentNode->children_.empty())
     {
-        SplitNodeDescriptor result(currentNode->split_->buildDescriptor());
-        result.flexH_ = currentNode->flexH_;
-        result.flexV_ = currentNode->flexV_;
+        const auto channelType =
+            currentNode->split_->getIndirectChannel().getType();
+
+        SplitNodeDescriptor result;
+        result.type_ = channelTypeToString(channelType);
+        result.channelName_ = currentNode->split_->getChannel()->getName();
+        result.filters_ = currentNode->split_->getFilters();
         return result;
     }
 
@@ -861,8 +909,6 @@ NodeDescriptor SplitContainer::buildDescriptorRecursively(
         descriptor.items_.push_back(
             this->buildDescriptorRecursively(child.get()));
     }
-    descriptor.flexH_ = currentNode->flexH_;
-    descriptor.flexV_ = currentNode->flexV_;
 
     return descriptor;
 }
@@ -1012,7 +1058,9 @@ void SplitContainer::refreshTabLiveStatus()
         }
     }
 
-    if (this->tab_->setLive(liveStatus) || this->tab_->setRerun(rerunStatus))
+    const bool liveChanged = this->tab_->setLive(liveStatus);
+    const bool rerunChanged = this->tab_->setRerun(rerunStatus);
+    if (liveChanged || rerunChanged)
     {
         auto *notebook = dynamic_cast<Notebook *>(this->parentWidget());
         if (notebook)
@@ -1217,7 +1265,7 @@ SplitContainer::Position SplitContainer::Node::releaseSplit()
 {
     assert(this->type_ == Type::Split);
 
-    if (this->parent_ == nullptr || this->parent_->children_.empty())
+    if (this->parent_ == nullptr)
     {
         this->type_ = Type::EmptyRoot;
         this->split_ = nullptr;
@@ -1275,10 +1323,7 @@ SplitContainer::Position SplitContainer::Node::releaseSplit()
                     ? SplitDirection::Below
                     : SplitDirection::Right;
             siblings.erase(it);
-            if (!siblings.empty())
-            {
-                position.relativeNode_ = siblings.back().get();
-            }
+            position.relativeNode_ = siblings.back().get();
         }
         else
         {

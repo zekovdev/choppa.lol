@@ -110,8 +110,7 @@ OverlayWindow::OverlayWindow(IndirectChannel channel,
     , interaction_(this)
 {
     this->setAttribute(Qt::WA_DeleteOnClose);
-    this->setWindowTitle(u"Chatterino - Overlay"_s);
-    this->setWindowRole(u"chatterino.overlay"_s);
+    this->setWindowTitle(u"choppa.lol - Overlay"_s);
 
     // QGridLayout is (ab)used to stack widgets and position them
     auto *grid = new QGridLayout(this);
@@ -507,7 +506,7 @@ void OverlayWindow::triggerFirstActivation()
     {
         welcomeText +=
             u"To toggle the click-through mode, press %1 (customizable "_s
-            "in the settings) while any Chatterino window is focused.".arg(
+            "in the settings) while any choppa.lol window is focused.".arg(
                 actualShortcut.toString());
     }
 
@@ -518,7 +517,7 @@ void OverlayWindow::triggerFirstActivation()
                    "discussions\">on GitHub</a>.";
 
     auto *box =
-        new QMessageBox(QMessageBox::Information, u"Chatterino - Overlay"_s,
+        new QMessageBox(QMessageBox::Information, u"choppa.lol - Overlay"_s,
                         welcomeText, QMessageBox::Ok, this);
     box->open();
 }

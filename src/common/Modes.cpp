@@ -4,20 +4,14 @@
 
 #include "common/Modes.hpp"
 
-#include "common/Args.hpp"
 #include "util/CombinePath.hpp"
 
 #include <QCoreApplication>
 
 namespace chatterino {
 
-Modes::Modes(const Args &args)
+Modes::Modes()
 {
-    if (args.portableEnable)
-    {
-        this->isPortable = true;
-    }
-
     QFile file(combinePath(QCoreApplication::applicationDirPath(), "modes"));
     if (!file.open(QIODevice::ReadOnly))
     {
@@ -37,6 +31,12 @@ Modes::Modes(const Args &args)
             this->isExternallyPackaged = true;
         }
     }
+}
+
+const Modes &Modes::instance()
+{
+    static Modes instance;
+    return instance;
 }
 
 }  // namespace chatterino

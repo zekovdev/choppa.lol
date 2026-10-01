@@ -6,12 +6,11 @@
 
 #include "singletons/Theme.hpp"
 #include "util/FunctionEventFilter.hpp"
+#include "widgets/helper/PopupGeometry.hpp"
 
-#include <QApplication>
 #include <QDebug>
 #include <QMimeData>
 #include <QPainter>
-#include <QScreen>
 
 namespace chatterino {
 
@@ -347,24 +346,17 @@ void Button::showMenu()
         return;
     }
 
-    auto menuSizeHint = this->menu_->sizeHint();
+    const auto area = popupAvailableRect(this);
+    auto menuSizeHint = this->menu_->sizeHint().boundedTo(area.size());
     auto point = this->mapToGlobal(
         QPoint(this->width() - menuSizeHint.width(), this->height()));
 
-    auto *screen = QApplication::screenAt(point);
-    if (screen == nullptr)
+    if (point.y() + menuSizeHint.height() > area.bottom())
     {
-        screen = QApplication::primaryScreen();
-    }
-    auto bounds = screen->availableGeometry();
-
-    if (point.y() + menuSizeHint.height() > bounds.bottom())
-    {
-        // Menu doesn't fit going down, flip it to go up instead
         point.setY(point.y() - menuSizeHint.height() - this->height());
     }
 
-    this->menu_->popup(point);
+    this->menu_->popup(containPopupPosition(area, menuSizeHint, point));
     this->menuVisible_ = true;
 }
 
@@ -397,12 +389,8 @@ void Button::paintButton(QPainter &painter)
 
             this->pixmapValid_ = true;
         }
-        // Disable smooth transformation, as we know the drawn pixmap has the
-        // same size as the target area (in pixels).
-        painter.setRenderHint(QPainter::SmoothPixmapTransform, false);
         painter.drawPixmap(this->rect(), this->cachedPixmap_,
                            {{}, this->cachedPixmap_.size()});
-        painter.setRenderHint(QPainter::SmoothPixmapTransform);
     }
     else
     {

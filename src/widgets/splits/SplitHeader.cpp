@@ -15,7 +15,6 @@
 #include "controllers/hotkeys/HotkeyController.hpp"
 #include "controllers/notifications/NotificationController.hpp"
 #include "providers/kick/KickChannel.hpp"
-#include "providers/twitch/api/Helix.hpp"
 #include "providers/twitch/TwitchAccount.hpp"
 #include "providers/twitch/TwitchChannel.hpp"
 #include "providers/twitch/TwitchIrcServer.hpp"
@@ -32,8 +31,8 @@
 #include "widgets/buttons/SvgButton.hpp"
 #include "widgets/dialogs/SettingsDialog.hpp"
 #include "widgets/helper/CommonTexts.hpp"
+#include "widgets/helper/ContainedMenu.hpp"
 #include "widgets/Label.hpp"
-#include "widgets/splits/PinnedMessageWidget.hpp"
 #include "widgets/splits/Split.hpp"
 #include "widgets/splits/SplitContainer.hpp"
 #include "widgets/TooltipWidget.hpp"
@@ -46,8 +45,6 @@
 #include <QPainter>
 
 #include <cmath>
-
-using namespace Qt::StringLiterals;
 
 namespace {
 
@@ -70,7 +67,7 @@ auto formatRoomModeUnclean(const TwitchChannel::RoomModes &modes) -> QString
 
     if (modes.r9k)
     {
-        text += "unique, ";
+        text += "r9k, ";
     }
     if (modes.slowMode > 0)
     {
@@ -101,7 +98,7 @@ auto formatRoomModeUnclean(const TwitchChannel::RoomModes &modes) -> QString
     return text;
 }
 
-QString formatRoomModeUnclean(const KickChannel::RoomModes &modes)
+TwitchChannel::RoomModes toTwitchRoomModes(const KickChannel::RoomModes &modes)
 {
     TwitchChannel::RoomModes twitch{
         .submode = modes.subscribersMode,
@@ -119,7 +116,64 @@ QString formatRoomModeUnclean(const KickChannel::RoomModes &modes)
     {
         twitch.slowMode = static_cast<int>(modes.slowModeDuration->count());
     }
-    return formatRoomModeUnclean(twitch);
+    return twitch;
+}
+
+/// Formats the active room modes as a rich-text row of small icons: a clock
+/// with the duration for slow mode, the emote-menu smiley for emote-only, a
+/// star for sub-only and a user icon (plus duration) for follower-only.
+/// Any accompanying text is rendered small and grey.
+auto formatRoomModeHtml(const TwitchChannel::RoomModes &modes,
+                        bool hasModRights) -> QString
+{
+    const auto icon = [](const QString &path) {
+        return QStringLiteral("<img src='%1' width='12' height='12' "
+                              "style='vertical-align: middle;'/>")
+            .arg(path);
+    };
+    const auto grey = [](const QString &text) {
+        return QStringLiteral("<span style='color:#a3a3a3;'>"
+                              "<small>%1</small></span>")
+            .arg(text);
+    };
+
+    QStringList parts;
+
+    if (modes.r9k)
+    {
+        parts.append(grey(QStringLiteral("r9k")));
+    }
+    if (modes.slowMode > 0)
+    {
+        parts.append(icon(":/buttons/clock.svg") + QStringLiteral("&nbsp;") +
+                     grey(localizeNumbers(modes.slowMode)));
+    }
+    if (modes.emoteOnly)
+    {
+        parts.append(icon(":/buttons/emoteGrey.svg"));
+    }
+    if (modes.submode)
+    {
+        parts.append(icon(":/buttons/star.svg"));
+    }
+    if (modes.followerOnly != -1)
+    {
+        auto part = icon(":/buttons/account-darkMode.svg");
+        if (modes.followerOnly != 0)
+        {
+            part += QStringLiteral("&nbsp;") +
+                    grey(formatDurationExact(
+                        std::chrono::minutes{modes.followerOnly}));
+        }
+        parts.append(part);
+    }
+
+    if (parts.isEmpty() && hasModRights)
+    {
+        parts.append(grey(QStringLiteral("none")));
+    }
+
+    return parts.join(QStringLiteral("&nbsp;"));
 }
 
 void cleanRoomModeText(QString &text, bool hasModRights)
@@ -129,16 +183,8 @@ void cleanRoomModeText(QString &text, bool hasModRights)
         text = text.mid(0, text.size() - 2);
     }
 
-    if (!text.isEmpty())
-    {
-        static QRegularExpression commaReplacement("^(.+?, .+?,) (.+)$");
-
-        auto match = commaReplacement.match(text);
-        if (match.hasMatch())
-        {
-            text = match.captured(1) + '\n' + match.captured(2);
-        }
-    }
+    // Keep the mode indicator on a single line; a second line overflows the
+    // fixed-height header and gets clipped.
 
     if (text.isEmpty() && hasModRights)
     {
@@ -221,8 +267,7 @@ auto formatOfflineTooltip(const TwitchChannel::StreamStatus &s)
         .arg(s.title.toHtmlEscaped());
 }
 
-auto formatTitle(const TwitchChannel::StreamStatus &s, Settings &settings,
-                 const std::vector<HelixMinimalUser> &sharedChatParticipants)
+auto formatTitle(const TwitchChannel::StreamStatus &s, Settings &settings)
 {
     auto title = QString();
 
@@ -237,22 +282,7 @@ auto formatTitle(const TwitchChannel::StreamStatus &s, Settings &settings,
     }
     else
     {
-        if (sharedChatParticipants.empty())
-        {
-            title += " (live)";
-        }
-        else
-        {
-            const auto mode = getSettings()->usernameDisplayMode.getEnum();
-            QStringList names;
-            for (const auto &p : sharedChatParticipants)
-            {
-                auto name = p.formatted(mode);
-                names.push_back(std::move(name));
-            }
-
-            title += " (live with " + names.join(", ") + ")";
-        }
+        title += " (live)";
     }
 
     // description
@@ -374,18 +404,6 @@ void SplitHeader::initializeLayout()
         },
         this, {4, 4});
 
-    this->pinButton_ = new SvgButton(
-        {
-            .dark = ":/buttons/pinnedMessage-chat.svg",
-            .light = ":/buttons/pinnedMessage-chat.svg",
-        },
-        this, {4, 4});
-    this->pinButton_->setToolTip(QStringLiteral("Toggle pinned message"));
-    this->pinButton_->setColor(this->theme->isLightTheme()
-                                   ? QColor(0x42, 0x42, 0x42)
-                                   : QColor(0xc0, 0xc0, 0xc0));
-    this->pinButton_->hide();
-
     this->addButton_ = new DrawnButton(DrawnButton::Symbol::Plus,
                                        {
                                            .padding = 3,
@@ -413,6 +431,8 @@ void SplitHeader::initializeLayout()
                              QSizePolicy::Preferred);
             w->setCentered(true);
             w->setPadding(QMargins{});
+            // Elide with "…" when there isn't enough room instead of clipping
+            w->setShouldElide(true);
         }),
         // space
         makeWidget<BaseWidget>([](auto w) {
@@ -421,11 +441,14 @@ void SplitHeader::initializeLayout()
         // mode
         this->modeButton_ = makeWidget<LabelButton>([&](auto w) {
             w->setSizePolicy(QSizePolicy::Minimum, QSizePolicy::Minimum);
+            // Truncate on the right when squeezed instead of clipping on
+            // both sides.
+            w->setLabelAlignment(Qt::AlignLeft | Qt::AlignVCenter);
+            // The room modes are shown as small inline icons
+            w->enableRichText();
             w->hide();
             w->setMenu(this->createChatModeMenu());
         }),
-        // pin indicator
-        this->pinButton_,
         // moderator
         this->moderationButton_,
         // chatter list
@@ -474,10 +497,6 @@ void SplitHeader::initializeLayout()
                          this->split_->openChatterList();
                      });
 
-    QObject::connect(this->pinButton_, &Button::leftClicked, this, [this]() {
-        this->split_->togglePinnedBanner();
-    });
-
     QObject::connect(this->addButton_, &Button::leftClicked, this, [this]() {
         this->split_->addSibling();
     });
@@ -519,12 +538,12 @@ std::unique_ptr<QMenu> SplitHeader::createMainMenu()
         "Popup overlay",
         h->getDisplaySequence(HotkeyCategory::Split, "popupOverlay"),
         this->split_, &Split::showOverlayWindow);
-    menu->addAction(u"Search…"_s,
+    menu->addAction("Search",
                     h->getDisplaySequence(HotkeyCategory::Split, "showSearch"),
                     this->split_, [this] {
                         this->split_->showSearch(true);
                     });
-    menu->addAction(u"Set filters…"_s,
+    menu->addAction("Set filters",
                     h->getDisplaySequence(HotkeyCategory::Split, "pickFilters"),
                     this->split_, &Split::setFiltersDialog);
     menu->addSeparator();
@@ -598,8 +617,7 @@ std::unique_ptr<QMenu> SplitHeader::createMainMenu()
         menu->addSeparator();
     }
 
-    if (this->split_->getSelectedChannel()->getType() ==
-        Channel::Type::TwitchWhispers)
+    if (this->split_->getChannel()->getType() == Channel::Type::TwitchWhispers)
     {
         menu->addAction(
             OPEN_WHISPERS_IN_BROWSER,
@@ -768,6 +786,8 @@ std::unique_ptr<QMenu> SplitHeader::createMainMenu()
     //    SLOT(moreMenuShowChangelog()));
     menu->addMenu(moreMenu);
 
+    ContainedMenu::install(menu.get(), this->window());
+
     return menu;
 }
 
@@ -778,7 +798,7 @@ std::unique_ptr<QMenu> SplitHeader::createChatModeMenu()
     this->modeActionSetSub = new QAction("Subscriber only", this);
     this->modeActionSetEmote = new QAction("Emote only", this);
     this->modeActionSetSlow = new QAction("Slow", this);
-    this->modeActionSetR9k = new QAction("Unique chat (R9K)", this);
+    this->modeActionSetR9k = new QAction("R9K", this);
     this->modeActionSetFollowers = new QAction("Followers only", this);
 
     this->modeActionSetFollowers->setCheckable(true);
@@ -795,8 +815,8 @@ std::unique_ptr<QMenu> SplitHeader::createChatModeMenu()
 
     auto execCommand = [this](const QString &command) {
         auto text = getApp()->getCommands()->execCommand(
-            command, this->split_->getSelectedChannel(), false);
-        this->split_->getSelectedChannel()->sendMessage(text);
+            command, this->split_->getChannel(), false);
+        this->split_->getChannel()->sendMessage(text);
     };
     auto toggle = [execCommand](const QString &command,
                                 QAction *action) mutable {
@@ -864,6 +884,8 @@ std::unique_ptr<QMenu> SplitHeader::createChatModeMenu()
                          toggle("/r9kbeta", this->modeActionSetR9k);
                      });
 
+    ContainedMenu::install(menu.get(), this->window());
+
     return menu;
 }
 
@@ -877,10 +899,13 @@ void SplitHeader::updateRoomModes()
     {
         this->modeButton_->setEnabled(twitchChannel->hasModRights());
 
-        QString text;
+        QString html;
+        QString tooltip;
         {
             auto roomModes = twitchChannel->accessRoomModes();
-            text = formatRoomModeUnclean(*roomModes);
+            html =
+                formatRoomModeHtml(*roomModes, twitchChannel->hasModRights());
+            tooltip = formatRoomModeUnclean(*roomModes);
 
             // Set menu action
             this->modeActionSetR9k->setChecked(roomModes->r9k);
@@ -890,13 +915,14 @@ void SplitHeader::updateRoomModes()
             this->modeActionSetFollowers->setChecked(roomModes->followerOnly !=
                                                      -1);
         }
-        cleanRoomModeText(text, twitchChannel->hasModRights());
+        cleanRoomModeText(tooltip, twitchChannel->hasModRights());
 
         // set the label text
 
-        if (!text.isEmpty())
+        if (!html.isEmpty())
         {
-            this->modeButton_->setText(text);
+            this->modeButton_->setText(html);
+            this->modeButton_->setToolTip(tooltip);
             this->modeButton_->show();
         }
         else
@@ -910,12 +936,15 @@ void SplitHeader::updateRoomModes()
     {
         this->modeButton_->setEnabled(false);
 
-        QString text = formatRoomModeUnclean(kc->roomModes());
-        cleanRoomModeText(text, false);
+        auto modes = toTwitchRoomModes(kc->roomModes());
+        QString html = formatRoomModeHtml(modes, false);
+        QString tooltip = formatRoomModeUnclean(modes);
+        cleanRoomModeText(tooltip, false);
 
-        if (!text.isEmpty())
+        if (!html.isEmpty())
         {
-            this->modeButton_->setText(text);
+            this->modeButton_->setText(html);
+            this->modeButton_->setToolTip(tooltip);
             this->modeButton_->show();
         }
         else
@@ -955,13 +984,6 @@ void SplitHeader::handleChannelChanged()
             channel = active->channel;
         }
     }
-    else if (auto *kickChannel = dynamic_cast<KickChannel *>(channel.get()))
-    {
-        this->channelConnections_.managedConnect(kickChannel->streamDataChanged,
-                                                 [this]() {
-                                                     this->updateChannelText();
-                                                 });
-    }
 
     if (auto *twitchChannel = dynamic_cast<TwitchChannel *>(channel.get()))
     {
@@ -969,22 +991,13 @@ void SplitHeader::handleChannelChanged()
             twitchChannel->streamStatusChanged, [this]() {
                 this->updateChannelText();
             });
-
-        this->channelConnections_.managedConnect(
-            twitchChannel->pinnedMessageChanged, [this]() {
-                this->updatePinButton();
-            });
-
-        this->channelConnections_.managedConnect(
-            this->split_->getPinnedBanner()->visibilityChanged, [this]() {
-                this->updatePinButton();
-            });
-
-        this->updatePinButton();
     }
-    else
+    else if (auto *kickChannel = dynamic_cast<KickChannel *>(channel.get()))
     {
-        this->updatePinButton();
+        this->channelConnections_.managedConnect(kickChannel->streamDataChanged,
+                                                 [this]() {
+                                                     this->updateChannelText();
+                                                 });
     }
 }
 
@@ -993,11 +1006,10 @@ void SplitHeader::scaleChangedEvent(float scale)
     int w = int(BUTTON_WIDTH * scale);
     int addSplitWidth = int(ADD_SPLIT_BUTTON_WIDTH * scale);
 
-    this->setFixedHeight(w);
+    this->setFixedHeight(int(26 * scale));
     this->dropdownButton_->setFixedWidth(w);
     this->moderationButton_->setFixedWidth(w);
     this->chattersButton_->setFixedWidth(w);
-    this->pinButton_->setFixedWidth(w);
 
     this->addButton_->setFixedWidth(addSplitWidth);
 }
@@ -1005,26 +1017,6 @@ void SplitHeader::scaleChangedEvent(float scale)
 void SplitHeader::setAddButtonVisible(bool value)
 {
     this->addButton_->setVisible(value);
-}
-
-void SplitHeader::updatePinButton()
-{
-    auto channel = this->split_->getSelectedChannel();
-    auto *twitchChannel = dynamic_cast<TwitchChannel *>(channel.get());
-    const bool hasPinnedMessage = twitchChannel != nullptr &&
-                                  twitchChannel->getPinnedMessage() != nullptr;
-
-    this->pinButton_->setVisible(hasPinnedMessage);
-    if (hasPinnedMessage && this->split_->getPinnedBanner()->isVisible())
-    {
-        this->pinButton_->setColor(this->theme->accent);
-    }
-    else
-    {
-        this->pinButton_->setColor(this->theme->isLightTheme()
-                                       ? QColor(0x42, 0x42, 0x42)
-                                       : QColor(0xc0, 0xc0, 0xc0));
-    }
 }
 
 void SplitHeader::updateChannelText()
@@ -1093,10 +1085,7 @@ void SplitHeader::updateChannelText()
                 this->lastThumbnail_.restart();
             }
             this->tooltipText_ = formatTooltip(*streamStatus, this->thumbnail_);
-
-            title +=
-                formatTitle(*streamStatus, *getSettings(),
-                            twitchChannel->getSharedChatSessionParticipants());
+            title += formatTitle(*streamStatus, *getSettings());
         }
         else
         {
@@ -1129,7 +1118,7 @@ void SplitHeader::updateChannelText()
                 this->lastThumbnail_.restart();
             }
             this->tooltipText_ = formatTooltip(twitch, this->thumbnail_, true);
-            title += formatTitle(twitch, *getSettings(), {});
+            title += formatTitle(twitch, *getSettings());
         }
         else
         {
@@ -1209,7 +1198,8 @@ void SplitHeader::paintEvent(QPaintEvent * /*event*/)
 
     painter.fillRect(this->rect(), background);
     painter.setPen(border);
-    painter.drawRect(0, 0, this->width() - 1, this->height() - 2);
+    painter.drawLine(12, this->height() - 2, this->width() - 12,
+                     this->height() - 2);
     painter.fillRect(0, this->height() - 1, this->width(), 1, background);
 }
 
@@ -1327,13 +1317,10 @@ void SplitHeader::themeChangedEvent()
     }
     this->titleLabel_->setPalette(palette);
 
-    // Re-apply pin button color to respect updated theme
-    this->updatePinButton();
-
-    auto bg = this->theme->splits.header.background;
+    // Transparent so the header's border stays visible around the button
     this->addButton_->setOptions({
-        .background = bg,
-        .backgroundHover = bg,
+        .background = QColor(Qt::transparent),
+        .backgroundHover = QColor(Qt::transparent),
     });
 
     this->update();
@@ -1350,7 +1337,7 @@ void SplitHeader::reloadChannelEmotes()
     }
     this->lastReloadedChannelEmotes_ = now;
 
-    auto channel = this->split_->getSelectedChannel();
+    auto channel = this->split_->getChannel();
 
     if (auto *twitchChannel = dynamic_cast<TwitchChannel *>(channel.get()))
     {
@@ -1375,7 +1362,7 @@ void SplitHeader::reloadSubscriberEmotes()
     }
     this->lastReloadedSubEmotes_ = now;
 
-    auto channel = this->split_->getSelectedChannel();
+    auto channel = this->split_->getChannel();
     if (auto *twitchChannel = dynamic_cast<TwitchChannel *>(channel.get()))
     {
         twitchChannel->refreshTwitchChannelEmotes(true);

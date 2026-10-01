@@ -15,11 +15,12 @@
 #include "widgets/buttons/LabelButton.hpp"
 #include "widgets/buttons/TitlebarButton.hpp"
 #include "widgets/buttons/TitlebarButtons.hpp"
+#include "widgets/ChoppaTitlebar.hpp"
 #include "widgets/Label.hpp"
 #include "widgets/Window.hpp"
 
+#include <QAbstractButton>
 #include <QApplication>
-#include <QFile>
 #include <QFont>
 #include <QIcon>
 #include <QScreen>
@@ -251,7 +252,7 @@ BaseWindow::BaseWindow(FlagsEnum<Flags> _flags, QWidget *parent)
 
     getSettings()->uiScale.connect(
         [this]() {
-            postToThread([this] {
+            QTimer::singleShot(0, this, [this] {
                 this->updateScale();
             });
         },
@@ -269,20 +270,6 @@ BaseWindow::BaseWindow(FlagsEnum<Flags> _flags, QWidget *parent)
 #endif
 
     this->themeChangedEvent();
-
-    if (this->flags_.has(UseSettingsStylesheet))
-    {
-        QFile styleFile(":/qss/settings.qss");
-        if (!styleFile.open(QFile::ReadOnly))
-        {
-            assert(false && "Resources not loaded");
-            qCWarning(chatterinoWidget) << "Resources not loaded";
-        }
-        QString stylesheet = QString::fromUtf8(styleFile.readAll());
-        this->setStyleSheet(stylesheet);
-        this->overrideBackgroundColor_ = QColor("#111111");
-    }
-
     DebugCount::increase(DebugObject::BaseWindow);
 }
 
@@ -303,6 +290,16 @@ void BaseWindow::setInitialBounds(QRect bounds, widgets::BoundsChecking mode)
 
 QRect BaseWindow::getBounds() const
 {
+    // Content chrome uses Qt window controls. Native resize notifications can
+    // leave the legacy cached bounds at the maximized size after restoring.
+    if (this->flags_.has(ContentChrome) && this->isVisible())
+    {
+        const auto bounds = this->isMaximized() || this->isMinimized()
+                                ? this->normalGeometry()
+                                : this->geometry();
+        if (bounds.isValid())
+            return bounds;
+    }
 #ifdef USEWINSDK
     return this->currentBounds_;
 #else
@@ -326,7 +323,7 @@ void BaseWindow::init()
         layout->setContentsMargins(0, 0, 0, 0);
         layout->setSpacing(0);
 
-        if (!this->frameless_)
+        if (!this->frameless_ && !this->flags_.has(ContentChrome))
         {
             QHBoxLayout *buttonLayout = this->ui_.titlebarBox =
                 new QHBoxLayout();
@@ -383,6 +380,11 @@ void BaseWindow::init()
             buttonLayout->addWidget(maxButton);
             buttonLayout->addWidget(exitButton);
             buttonLayout->setSpacing(0);
+        }
+
+        if (this->flags_.has(ContentChrome))
+        {
+            layout->addWidget(new ChoppaTitlebar(this));
         }
 
         this->ui_.layoutBase = new BaseWidget(this);
@@ -522,6 +524,14 @@ void BaseWindow::windowDeactivationEvent()
 
 void BaseWindow::themeChangedEvent()
 {
+    if (this->flags_.has(ContentChrome))
+    {
+        auto Palette = this->theme->palette;
+        Palette.setColor(QPalette::Window, QColor("#111111"));
+        Palette.setColor(QPalette::WindowText, QColor("#eeeeee"));
+        this->setPalette(Palette);
+        return;
+    }
     if (this->hasCustomWindowFrame())
     {
         QPalette palette;
@@ -542,12 +552,6 @@ void BaseWindow::themeChangedEvent()
         {
             button->setMouseEffectColor(this->theme->window.text);
         }
-    }
-    else if (this->flags_.has(UseSettingsStylesheet))
-    {
-        QPalette palette;
-        palette.setColor(QPalette::Window, QColor("#111"));
-        this->setPalette(palette);
     }
     else
     {
@@ -720,7 +724,8 @@ void BaseWindow::changeEvent(QEvent *)
         this->ui_.titlebarButtons->updateMaxButton();
     }
 
-    if (this->isVisible() && this->hasCustomWindowFrame())
+    if (this->isVisible() && this->hasCustomWindowFrame() &&
+        !this->flags_.has(ContentChrome))
     {
         auto hwnd = this->safeHWND();
         if (hwnd)
@@ -1074,6 +1079,17 @@ void BaseWindow::calcButtonsSizes()
 
 void BaseWindow::drawCustomWindowFrame(QPainter &painter)
 {
+    if (this->flags_.has(ContentChrome))
+    {
+        painter.fillRect(this->rect(), QColor("#111111"));
+        const auto Border = 1.0 / this->devicePixelRatioF();
+        painter.setPen(QPen(QColor("#383838"), Border));
+        painter.setBrush(Qt::NoBrush);
+        painter.drawRect(
+            QRectF(this->rect())
+                .adjusted(Border / 2, Border / 2, -Border / 2, -Border / 2));
+        return;
+    }
 #ifdef USEWINSDK
     if (this->hasCustomWindowFrame())
     {
@@ -1345,8 +1361,15 @@ bool BaseWindow::handleNCHITTEST(MSG *msg, qintptr *result)
                 *result = HTCLIENT;
             }
 
+            if (*result == 0 && this->flags_.has(ContentChrome))
+            {
+                const auto *widget = this->childAt(point);
+                if (qobject_cast<const QAbstractButton *>(widget))
+                    *result = HTCLIENT;
+            }
+
             // Check the titlebar buttons
-            if (*result == 0 &&
+            if (*result == 0 && this->ui_.titlebarBox &&
                 this->ui_.titlebarBox->geometry().contains(point))
             {
                 for (const auto *widget : this->ui_.buttons)

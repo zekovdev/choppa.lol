@@ -300,6 +300,8 @@ void Scrollbar::paintEvent(QPaintEvent * /*event*/)
     bool enableRedeemedHighlights = getSettings()->enableRedeemedHighlight;
     bool enableFirstMessageHighlights =
         getSettings()->enableFirstMessageHighlight;
+    bool enableElevatedMessageHighlights =
+        getSettings()->enableElevatedMessageHighlight;
 
     if (this->shouldShowThumb())
     {
@@ -347,8 +349,14 @@ void Scrollbar::paintEvent(QPaintEvent * /*event*/)
                 continue;
             }
 
+            if (highlight.isElevatedMessageHighlight() &&
+                !enableElevatedMessageHighlights)
+            {
+                continue;
+            }
+
             QColor color = highlight.getColor();
-            color.setAlpha(255);
+            color.setAlpha(150);
 
             int y = static_cast<int>(dY * static_cast<float>(i));
             switch (highlight.getStyle())

@@ -18,13 +18,10 @@
 #    include <semver/semver.hpp>
 #    include <sol/forward.hpp>
 
-#    include <cassert>
 #    include <memory>
 #    include <optional>
 #    include <unordered_map>
 #    include <unordered_set>
-#    include <utility>
-#    include <variant>
 #    include <vector>
 
 struct lua_State;
@@ -40,25 +37,6 @@ struct SignalCallback;
 
 namespace chatterino {
 
-/// A plugin that hasn't been loaded.
-///
-/// Most likely, its metadata is invalid.
-class UnloadedPlugin
-{
-public:
-    QString id;
-    PluginMeta meta;
-    QDir loadDirectory;
-
-    UnloadedPlugin(QString id_, PluginMeta meta_, const QDir &loadDirectory_)
-        : id(std::move(id_))
-        , meta(std::move(meta_))
-        , loadDirectory(loadDirectory_)
-    {
-    }
-};
-
-/// A plugin with a valid lua state
 class Plugin
 {
 public:
@@ -71,12 +49,8 @@ public:
         , meta(std::move(meta))
         , loadDirectory_(loadDirectory)
         , state_(state)
-        , selfRef_(this)
+        , selfRef_(state ? this : nullptr)
     {
-        // The PluginMeta here must be valid, otherwise it should be initialized
-        // as an UnloadedPlugin
-        assert(this->meta.isValid());
-        assert(this->state_ != nullptr);
     }
 
     ~Plugin();
@@ -174,10 +148,5 @@ private:
     friend class PluginController;
     friend class PluginControllerAccess;  // this is for tests
 };
-
-using PluginPtr = std::unique_ptr<Plugin>;
-using AnyPlugin = std::variant<PluginPtr, UnloadedPlugin>;
-
 }  // namespace chatterino
-
 #endif

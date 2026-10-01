@@ -5,7 +5,6 @@
 #pragma once
 
 #include <QString>
-#include <QStringView>
 
 #include <chrono>
 #include <functional>
@@ -24,9 +23,6 @@ using MessagePtr = std::shared_ptr<const Message>;
 }  // namespace chatterino
 
 namespace chatterino::recentmessages {
-
-inline constexpr QStringView DEFAULT_API_URL =
-    u"https://recent-messages.robotty.de/api/v2/recent-messages/%1";
 
 using ResultCallback = std::function<void(const std::vector<MessagePtr> &)>;
 using ErrorCallback = std::function<void()>;

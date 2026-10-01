@@ -27,8 +27,6 @@
 
 namespace chatterino {
 
-constexpr int PIXMAP_WIDTH = 500;
-
 constexpr QStringView LINK_CHATTERINO_FEATURES =
     u"https://chatterino.com/#features";
 
@@ -42,17 +40,10 @@ AboutPage::AboutPage()
 
     auto layout = widget.setLayoutType<QVBoxLayout>();
     {
-        QPixmap pixmap;
-        pixmap.load(":/settings/aboutlogo.png");
-
         auto logo = layout.emplace<QLabel>().assign(&this->logo_);
-        logo->setPixmap(pixmap);
-        if (pixmap.width() != 0)
-        {
-            logo->setFixedSize(PIXMAP_WIDTH,
-                               PIXMAP_WIDTH * pixmap.height() / pixmap.width());
-        }
-        logo->setScaledContents(true);
+        logo->setText("choppa<span style='color:#888888'>.lol</span>");
+        logo->setStyleSheet(
+            "font: 700 28px 'Satoshi'; padding: 8px; color: white;");
 
         // Version
         auto versionInfo = layout.emplace<QGroupBox>("Version");
@@ -81,6 +72,20 @@ AboutPage::AboutPage()
             label->setWordWrap(true);
             label->setOpenExternalLinks(true);
             label->setTextInteractionFlags(Qt::TextBrowserInteraction);
+        }
+
+        auto aboutChoppa = layout.emplace<QGroupBox>("About choppa.lol");
+        {
+            auto l = aboutChoppa.emplace<QVBoxLayout>();
+
+            // clang-format off
+            auto identity = l.emplace<QLabel>("choppa.lol is an independent desktop chat client by <a href=\"https://github.com/zekovdev\">zekovdev</a>, built on the open-source Chatterino and Chatterino7 foundation.");
+            identity->setOpenExternalLinks(true);
+            identity->setWordWrap(true);
+            auto story = l.emplace<QLabel>("Built for fun by a reverse engineer and C++ developer. This is a personal hobby project and is not an official Twitch, Kick or 7TV product.");
+            story->setWordWrap(true);
+            l.emplace<QLabel>("Project & source: <a href=\"https://github.com/zekovdev/choppa.lol\">github.com/zekovdev/choppa.lol</a>")->setOpenExternalLinks(true);
+            // clang-format on
         }
 
         // About Chatterino
@@ -122,6 +127,11 @@ AboutPage::AboutPage()
             addLicense(form.getElement(), "Pajlada/Serialize",
                        "https://github.com/pajlada/serialize",
                        ":/licenses/pajlada_serialize.txt");
+#ifndef NO_QTKEYCHAIN
+            addLicense(form.getElement(), "QtKeychain",
+                       "https://github.com/frankosterfeld/qtkeychain",
+                       ":/licenses/qtkeychain.txt");
+#endif
             addLicense(form.getElement(), "lrucache",
                        "https://github.com/lamerman/cpp-lru-cache",
                        ":/licenses/lrucache.txt");
@@ -294,7 +304,7 @@ void AboutPage::addLicense(QFormLayout *form, const QString &name,
                     BaseWindow::BoundsCheckOnShow,
                 },
                 parent);
-            window->setWindowTitle("Chatterino - License for " + name);
+            window->setWindowTitle("Choppa Chat - License for " + name);
             window->setAttribute(Qt::WA_DeleteOnClose);
             auto *layout = new QVBoxLayout();
             auto *edit = new QTextEdit;

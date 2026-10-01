@@ -22,6 +22,7 @@ struct IvrSubage {
     const bool isSubbed;
     const QString subTier;
     const int totalSubMonths;
+    const QString followingSince;
 
     IvrSubage(const QJsonObject &root)
         : isSubHidden(root.value("statusHidden").toBool())
@@ -29,6 +30,7 @@ struct IvrSubage {
         , subTier(root.value("meta").toObject().value("tier").toString())
         , totalSubMonths(
               root.value("cumulative").toObject().value("months").toInt())
+        , followingSince(root.value("followedAt").toString())
     {
     }
 };

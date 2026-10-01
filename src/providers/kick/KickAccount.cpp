@@ -27,8 +27,6 @@ std::optional<KickAccountData> KickAccountData::loadRaw(const std::string &key)
     auto clientID = QStringSetting::get("/kickAccounts/" + key + "/clientID");
     auto clientSecret =
         QStringSetting::get("/kickAccounts/" + key + "/clientSecret");
-    auto publicProxy =
-        QStringSetting::get("/kickAccounts/" + key + "/publicProxy");
     auto authToken = QStringSetting::get("/kickAccounts/" + key + "/authToken");
     auto refreshToken =
         QStringSetting::get("/kickAccounts/" + key + "/refreshToken");
@@ -36,11 +34,8 @@ std::optional<KickAccountData> KickAccountData::loadRaw(const std::string &key)
         QStringSetting::get("/kickAccounts/" + key + "/expiresAt");
 
     if (username.isEmpty() || userID == 0 || clientID.isEmpty() ||
-        authToken.isEmpty() || refreshToken.isEmpty() || expiresAtStr.isEmpty())
-    {
-        return std::nullopt;
-    }
-    if (publicProxy.isEmpty() && clientSecret.isEmpty())
+        clientSecret.isEmpty() || authToken.isEmpty() ||
+        refreshToken.isEmpty() || expiresAtStr.isEmpty())
     {
         return std::nullopt;
     }
@@ -52,7 +47,6 @@ std::optional<KickAccountData> KickAccountData::loadRaw(const std::string &key)
         .userID = userID,
         .clientID = clientID.trimmed(),
         .clientSecret = clientSecret.trimmed(),
-        .publicProxy = publicProxy.trimmed(),
         .authToken = authToken.trimmed(),
         .refreshToken = refreshToken.trimmed(),
         .expiresAt = expiresAt,
@@ -66,7 +60,6 @@ void KickAccountData::save() const
     UInt64Setting::set(basePath + "/userID", this->userID);
     QStringSetting::set(basePath + "/clientID", this->clientID);
     QStringSetting::set(basePath + "/clientSecret", this->clientSecret);
-    QStringSetting::set(basePath + "/publicProxy", this->publicProxy);
     QStringSetting::set(basePath + "/authToken", this->authToken);
     QStringSetting::set(basePath + "/refreshToken", this->refreshToken);
     QStringSetting::set(basePath + "/expiresAt",
@@ -80,7 +73,6 @@ KickAccount::KickAccount(const KickAccountData &args)
     , userID_(args.userID)
     , clientID_(args.clientID)
     , clientSecret_(args.clientSecret)
-    , publicProxy_(args.publicProxy)
     , authToken_(args.authToken)
     , refreshToken_(args.refreshToken)
     , expiresAt_(args.expiresAt)
@@ -96,7 +88,6 @@ void KickAccount::save() const
         .userID = this->userID_,
         .clientID = this->clientID_,
         .clientSecret = this->clientSecret_,
-        .publicProxy = this->publicProxy_,
         .authToken = this->authToken_,
         .refreshToken = this->refreshToken_,
         .expiresAt = this->expiresAt_,
@@ -128,11 +119,6 @@ bool KickAccount::update(const KickAccountData &data)
     {
         changed = true;
         this->clientSecret_ = data.clientSecret;
-    }
-    if (this->publicProxy_ != data.publicProxy)
-    {
-        changed = true;
-        this->publicProxy_ = data.publicProxy;
     }
     if (this->authToken_ != data.authToken)
     {
@@ -231,7 +217,7 @@ void KickAccount::loadSeventvUser()
 
     seventv->getUserByKickID(
         this->userID(),
-        [this, loadPersonalEmotes](const auto &json, const auto & /*raw*/) {
+        [this, loadPersonalEmotes](const auto &json) {
             const auto user = json["user"].toObject();
             const auto id = user["id"].toString();
             if (id.isEmpty())
@@ -305,23 +291,13 @@ void KickAccount::doRefresh()
     QUrlQuery payload{
         {"refresh_token"_L1, this->refreshToken_},
         {"client_id"_L1, this->clientID_},
+        {"client_secret"_L1, this->clientSecret_},
         {"grant_type"_L1, "refresh_token"_L1},
     };
 
-    if (!this->clientSecret_.isEmpty())
-    {
-        payload.addQueryItem("client_secret"_L1, this->clientSecret_);
-    }
-    auto url = [&]() -> QUrl {
-        if (!this->publicProxy_.isEmpty())
-        {
-            return {this->publicProxy_ % u"/oauth/token"};
-        }
-        return u"https://id.kick.com/oauth/token"_s;
-    }();
-
     auto weak = this->weak_from_this();
-    NetworkRequest(url, NetworkRequestType::Post)
+    NetworkRequest(u"https://id.kick.com/oauth/token"_s,
+                   NetworkRequestType::Post)
         .header("Content-Type", "application/x-www-form-urlencoded")
         .hideRequestBody()
         .payload(payload.toString(QUrl::FullyEncoded).toUtf8())

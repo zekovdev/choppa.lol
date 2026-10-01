@@ -57,8 +57,7 @@
                     ]
                 }
             ],
-            "externalBadges": [
-            ],
+            "externalBadges": [],
             "flags": "System|DoNotTriggerNotification|ClearChat|ModerationAction",
             "frozen": false,
             "id": "",
@@ -68,10 +67,8 @@
             "searchText": "Chat has been cleared by a moderator. (4 times) ",
             "serverReceivedTime": "2025-01-12T10:41:54Z",
             "timeoutUser": "",
-            "twitchBadgeInfos": {
-            },
-            "twitchBadges": [
-            ],
+            "twitchBadgeInfos": {},
+            "twitchBadges": [],
             "userID": "",
             "usernameColor": "#ff000000"
         },
@@ -181,6 +178,17 @@
                     "type": "BadgeElement"
                 },
                 {
+                    "flags": "BadgeSevenTV",
+                    "link": {
+                        "type": "None",
+                        "value": ""
+                    },
+                    "tooltip": "",
+                    "trailingSpace": true,
+                    "type": "SeventvBadgeElement",
+                    "userID": "11148817"
+                },
+                {
                     "color": "#ffcc44ff",
                     "flags": "Username",
                     "link": {
@@ -224,8 +232,7 @@
                     "url": ""
                 }
             ],
-            "externalBadges": [
-            ],
+            "externalBadges": [],
             "flags": "Collapsed",
             "frozen": false,
             "id": "b4f3ac1d-6335-4567-bb8d-e76dfd83f7e3",

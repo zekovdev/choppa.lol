@@ -59,6 +59,17 @@
                     "type": "TwitchModerationElement"
                 },
                 {
+                    "flags": "BadgeSevenTV",
+                    "link": {
+                        "type": "None",
+                        "value": ""
+                    },
+                    "tooltip": "",
+                    "trailingSpace": true,
+                    "type": "SeventvBadgeElement",
+                    "userID": "129546453"
+                },
+                {
                     "color": "#ffff0000",
                     "flags": "Username",
                     "link": {
@@ -190,8 +201,7 @@
                     "url": ""
                 }
             ],
-            "externalBadges": [
-            ],
+            "externalBadges": [],
             "flags": "Collapsed",
             "frozen": false,
             "id": "aea562cc-1adf-47de-b656-0aaa245f1030",

@@ -26,8 +26,11 @@ SettingsDialogTab::SettingsDialogTab(SettingsDialog *_dialog,
     this->ui_.icon.addFile(imageFileName);
 
     this->setCursor(QCursor(Qt::PointingHandCursor));
+    this->setFocusPolicy(Qt::StrongFocus);
+    this->setAccessibleName(name);
+    this->setToolTip(name);
 
-    this->setStyleSheet("color: #FFF");
+    this->setStyleSheet("color: #b0b0b6");
 }
 
 void SettingsDialogTab::setSelected(bool _selected)
@@ -40,6 +43,7 @@ void SettingsDialogTab::setSelected(bool _selected)
     //    height: <checkbox-size>px;
 
     this->selected_ = _selected;
+    this->update();
     this->selectedChanged(this->selected_);
 }
 
@@ -64,19 +68,16 @@ void SettingsDialogTab::paintEvent(QPaintEvent *)
 
     this->style()->drawPrimitive(QStyle::PE_Widget, &opt, &painter, this);
 
-    int iconSize = 20 * this->scale();
-    int pad = (this->height() - iconSize) / 2;
-    QPixmap pixmap = this->ui_.icon.pixmap(
-        QSize(this->height() - pad * 2, this->height() - pad * 2));
-
-    painter.drawPixmap(pad, pad, pixmap);
-
-    pad = (3 * pad) + iconSize;
-
-    this->style()->drawItemText(
-        &painter, QRect(pad, 0, this->width() - pad, this->height()),
-        Qt::AlignLeft | Qt::AlignVCenter, this->palette(), false,
-        this->ui_.labelText);
+    painter.setRenderHint(QPainter::Antialiasing);
+    painter.setPen(
+        QColor(this->selected_ || this->hasFocus() ? "#666666" : "#292929"));
+    painter.setBrush(QColor(this->selected_ ? "#242424" : "#151515"));
+    painter.drawRoundedRect(this->rect().adjusted(1, 1, -1, -1), 6, 6);
+    painter.setPen(QColor(this->selected_ ? "#ffffff" : "#aaaaaa"));
+    painter.drawText(
+        this->rect().adjusted(5, 0, -5, 0), Qt::AlignCenter,
+        this->fontMetrics().elidedText(this->ui_.labelText, Qt::ElideRight,
+                                       this->width() - 10));
 }
 
 void SettingsDialogTab::mousePressEvent(QMouseEvent *event)

@@ -268,7 +268,6 @@ const std::unordered_map<QString, VariableReplacer> COMMAND_VARS{
     },
     // variables used in mod buttons and the like, these make no sense in normal commands, so they are left empty
     {"input.text", NO_OP_PLACEHOLDER},
-    {"element.copytext", NO_OP_PLACEHOLDER},
 };
 
 }  // namespace
@@ -529,9 +528,11 @@ CommandController::CommandController(const Paths &paths)
     this->registerCommand("/c2-theme-autoreload", &commands::toggleThemeReload);
 }
 
-void CommandController::save()
+pajlada::Settings::SettingManager::SaveResult CommandController::save()
 {
-    this->sm_->save();
+    // Flush pending vector edits before writing; delayedItemsChanged may not have fired yet.
+    this->commandsSetting_->setValue(this->items.raw());
+    return this->sm_->save();
 }
 
 CommandModel *CommandController::createModel(QObject *parent)

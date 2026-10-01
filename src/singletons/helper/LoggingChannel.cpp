@@ -20,11 +20,8 @@ const QByteArray ENDLINE("\n");
 
 void appendLine(QFile &fileHandle, const QString &line)
 {
-    assert(fileHandle.isOpen());
-    assert(fileHandle.isWritable());
-
-    fileHandle.write(line.toUtf8());
-    fileHandle.flush();
+    if (fileHandle.isOpen() && fileHandle.isWritable())
+        fileHandle.write(line.toUtf8());
 }
 
 QString generateOpeningString(
@@ -91,12 +88,23 @@ LoggingChannel::LoggingChannel(QString _channelName, QString _platform)
                          this->platform.mid(1).toLower() + QDir::separator() +
                          this->subDirectory;
 
-    getSettings()->logPath.connect([this](const QString &logPath, auto) {
-        this->baseDirectory = logPath.isEmpty()
-                                  ? getApp()->getPaths().messageLogDirectory
-                                  : logPath;
-        this->openLogFile();
-    });
+    this->FlushTimer.setSingleShot(true);
+    this->FlushTimer.setInterval(500);
+    QObject::connect(&this->FlushTimer, &QTimer::timeout, &this->FlushTimer,
+                     [this] {
+                         if (this->fileHandle.isOpen())
+                             this->fileHandle.flush();
+                         if (this->currentStreamFileHandle.isOpen())
+                             this->currentStreamFileHandle.flush();
+                     });
+    getSettings()->logPath.connect(
+        [this](const QString &logPath, auto) {
+            this->baseDirectory = logPath.isEmpty()
+                                      ? getApp()->getPaths().messageLogDirectory
+                                      : logPath;
+            this->openLogFile();
+        },
+        this->LogConnections);
 }
 
 LoggingChannel::~LoggingChannel()
@@ -260,6 +268,8 @@ void LoggingChannel::addMessage(const MessagePtr &message,
     str.append(ENDLINE);
 
     appendLine(this->fileHandle, str);
+    if (!this->FlushTimer.isActive())
+        this->FlushTimer.start();
 
     if (!streamID.isEmpty() && getSettings()->separatelyStoreStreamLogs)
     {

@@ -26,7 +26,7 @@ std::shared_ptr<Hotkey> HotkeyModel::getItemFromRow(
 void HotkeyModel::getRowFromItem(const std::shared_ptr<Hotkey> &item,
                                  std::vector<QStandardItem *> &row)
 {
-    QFont font("Segoe UI", 10);
+    QFont font("Satoshi", 10, QFont::Bold);
 
     if (!item->validAction())
     {
@@ -50,7 +50,8 @@ int HotkeyModel::beforeInsert(const std::shared_ptr<Hotkey> &item,
         auto newRow = this->createRow();
 
         setStringItem(newRow[0], category, false, false);
-        newRow[0]->setData(QFont("Segoe UI Light", 16), Qt::FontRole);
+        newRow[0]->setData(QFont("Satoshi", 16, QFont::Bold),
+                           Qt::FontRole);
 
         // make sure category headers aren't editable
         for (unsigned long i = 1; i < newRow.size(); i++)

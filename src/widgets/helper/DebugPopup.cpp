@@ -20,12 +20,12 @@ using namespace literals;
 
 DebugPopup::DebugPopup()
 {
-    auto *layout = new QVBoxLayout(this);
+    auto *layout = new QVBoxLayout(this->getLayoutContainer());
     auto *text = new QLabel(this);
     auto *timer = new QTimer(this);
     auto *copyButton = new QPushButton(u"&Copy"_s);
 
-    QObject::connect(timer, &QTimer::timeout, [text] {
+    QObject::connect(timer, &QTimer::timeout, this, [text] {
         text->setText(DebugCount::getDebugText());
     });
     timer->start(300);

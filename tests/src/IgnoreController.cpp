@@ -57,23 +57,20 @@ TEST_F(TestIgnoreController, processIgnorePhrases)
     struct TestCase {
         std::vector<IgnorePhrase> phrases;
         QString input;
-        std::vector<TwitchSpecialOccurrence> twitchSpecials;
+        std::vector<TwitchEmoteOccurrence> twitchEmotes;
         QString expectedMessage;
-        std::vector<TwitchSpecialOccurrence> expectedTwitchSpecials;
+        std::vector<TwitchEmoteOccurrence> expectedTwitchEmotes;
     };
 
     auto *twitchEmotes = this->mockApplication->getEmotes()->getTwitchEmotes();
 
     auto emoteAt = [&](int at, const QString &name) {
-        return TwitchSpecialOccurrence{
+        return TwitchEmoteOccurrence{
             .start = at,
-            .length = static_cast<int>(name.size()),
-            .data =
-                TwitchEmoteOccurrence{
-                    .ptr = twitchEmotes->getOrCreateEmote(EmoteId{name},
-                                                          EmoteName{name}),
-                    .name = EmoteName{name},
-                },
+            .end = static_cast<int>(at + name.size() - 1),
+            .ptr =
+                twitchEmotes->getOrCreateEmote(EmoteId{name}, EmoteName{name}),
+            .name = EmoteName{name},
         };
     };
 
@@ -175,75 +172,19 @@ TEST_F(TestIgnoreController, processIgnorePhrases)
             "Kappa",
             {emoteAt(127, "Kappa")},
         },
-        {
-            {regexReplace("(f)o(o)", "\\1\\2", false)},
-            "foo foo foo foo Kappa",
-            {emoteAt(15, "Kappa")},
-            "fo fo fo fo Kappa",
-            {emoteAt(11, "Kappa")},
-        },
-        {
-            .phrases = {regularReplace("pp", "p")},
-            .input = "foo Kappa bar",
-            .twitchSpecials = {emoteAt(4, "Kappa")},
-            .expectedMessage = "foo Kapa bar",
-            .expectedTwitchSpecials = {},
-        },
-        {
-            .phrases = {regularReplace("pa", "a")},
-            .input = "foo Kappa bar",
-            .twitchSpecials = {emoteAt(4, "Kappa")},
-            .expectedMessage = "foo Kapa bar",
-            .expectedTwitchSpecials = {},
-        },
-        {
-            .phrases = {regularReplace("Ka", "a")},
-            .input = "foo Kappa bar",
-            .twitchSpecials = {emoteAt(4, "Kappa")},
-            .expectedMessage = "foo appa bar",
-            .expectedTwitchSpecials = {},
-        },
-        {
-            .phrases = {regularReplace("Ka", "a")},
-            .input = "Kappa",
-            .twitchSpecials = {emoteAt(0, "Kappa")},
-            .expectedMessage = "appa",
-            .expectedTwitchSpecials = {},
-        },
-        {
-            .phrases = {regularReplace("pa", "a")},
-            .input = "Kappa",
-            .twitchSpecials = {emoteAt(0, "Kappa")},
-            .expectedMessage = "Kapa",
-            .expectedTwitchSpecials = {},
-        },
-        {
-            .phrases = {regularReplace("a foo", "a")},
-            .input = "Kappa foo",
-            .twitchSpecials = {emoteAt(0, "Kappa")},
-            .expectedMessage = "Kappa",
-            .expectedTwitchSpecials = {emoteAt(0, "Kappa")},
-        },
-        {
-            .phrases = {regularReplace("Word", "wor")},
-            .input = "[Multi Word Emote]",
-            .twitchSpecials = {emoteAt(0, "[Multi Word Emote]")},
-            .expectedMessage = "[Multi wor Emote]",
-            .expectedTwitchSpecials = {},
-        },
     };
 
     for (const auto &test : testCases)
     {
         auto message = test.input;
-        auto emotes = test.twitchSpecials;
+        auto emotes = test.twitchEmotes;
         processIgnorePhrases(test.phrases, message, emotes);
 
         EXPECT_EQ(message, test.expectedMessage)
             << "Message not equal for input '" << test.input
             << "' - expected: '" << test.expectedMessage << "' got: '"
             << message << "'";
-        EXPECT_EQ(emotes, test.expectedTwitchSpecials)
+        EXPECT_EQ(emotes, test.expectedTwitchEmotes)
             << "Twitch emotes not equal for input '" << test.input
             << "' and output '" << message << "'";
     }

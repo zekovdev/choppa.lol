@@ -38,6 +38,10 @@ public:
 
     void setSelected(bool selected_);
     SettingsPage *page();
+    SettingsPage *createdPage() const
+    {
+        return this->page_;
+    }
     SettingsTabId id() const;
 
     const QString &name() const;
@@ -48,6 +52,17 @@ Q_SIGNALS:
 private:
     void paintEvent(QPaintEvent *) override;
     void mousePressEvent(QMouseEvent *event) override;
+    void keyPressEvent(QKeyEvent *event) override
+    {
+        if (event->key() == Qt::Key_Space || event->key() == Qt::Key_Return)
+        {
+            QMouseEvent click(QEvent::MouseButtonPress, QPointF(), QPointF(),
+                              Qt::LeftButton, Qt::LeftButton, Qt::NoModifier);
+            this->mousePressEvent(&click);
+        }
+        else
+            BaseWidget::keyPressEvent(event);
+    }
 
     struct {
         QString labelText;

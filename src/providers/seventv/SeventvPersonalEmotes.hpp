@@ -54,9 +54,9 @@ public:
         uint64_t userID) const;
 
     EmotePtr getEmoteForTwitchUser(const QString &userID,
-                                   EmoteNameView emoteName) const;
+                                   const EmoteName &emoteName) const;
     EmotePtr getEmoteForKickUser(uint64_t userID,
-                                 EmoteNameView emoteName) const;
+                                 const EmoteName &emoteName) const;
 
     std::optional<std::shared_ptr<const EmoteMap>> getEmoteSetByID(
         const QString &emoteSetID) const;
@@ -65,7 +65,7 @@ private:
     QList<std::shared_ptr<const EmoteMap>> collectEmoteSets(
         std::span<const QString> emoteSetIDs) const;
     EmotePtr findInEmoteSets(std::span<const QString> emoteSetIDs,
-                             EmoteNameView name) const;
+                             const EmoteName &name) const;
 
     // emoteSetID => emoteSet
     std::unordered_map<QString, Atomic<std::shared_ptr<const EmoteMap>>>

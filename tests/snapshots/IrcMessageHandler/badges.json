@@ -166,22 +166,15 @@
                     "type": "BadgeElement"
                 },
                 {
-                    "emote": {
-                        "id": "1",
-                        "images": {
-                            "1x": "https://chatterino.com/7tv//1x"
-                        },
-                        "name": "7tv:7TV badge name",
-                        "tooltip": "7TV badge"
-                    },
                     "flags": "BadgeSevenTV",
                     "link": {
                         "type": "None",
                         "value": ""
                     },
-                    "tooltip": "7TV badge",
+                    "tooltip": "",
                     "trailingSpace": true,
-                    "type": "BadgeElement"
+                    "type": "SeventvBadgeElement",
+                    "userID": "123456"
                 },
                 {
                     "color": "#ffff0000",

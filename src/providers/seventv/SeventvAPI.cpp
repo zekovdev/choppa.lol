@@ -8,6 +8,8 @@
 #include "common/network/NetworkRequest.hpp"
 #include "common/network/NetworkResult.hpp"
 
+#include <QJsonObject>
+
 namespace {
 
 using namespace chatterino::literals;
@@ -16,6 +18,7 @@ const QString API_URL_USER = u"https://7tv.io/v3/users/twitch/%1"_s;
 const QString API_URL_KICK_USER = u"https://7tv.io/v3/users/kick/%1"_s;
 const QString API_URL_EMOTE_SET = u"https://7tv.io/v3/emote-sets/%1"_s;
 const QString API_URL_PRESENCES = u"https://7tv.io/v3/users/%1/presences"_s;
+const QString API_URL_GQL = u"https://7tv.io/v3/gql"_s;
 
 }  // namespace
 
@@ -23,8 +26,7 @@ const QString API_URL_PRESENCES = u"https://7tv.io/v3/users/%1/presences"_s;
 namespace chatterino {
 
 void SeventvAPI::getUserByTwitchID(
-    const QString &twitchID,
-    SuccessCallback<const QJsonObject &, const QByteArray &> &&onSuccess,
+    const QString &twitchID, SuccessCallback<const QJsonObject &> &&onSuccess,
     ErrorCallback &&onError)
 {
     NetworkRequest(API_URL_USER.arg(twitchID), NetworkRequestType::Get)
@@ -32,7 +34,7 @@ void SeventvAPI::getUserByTwitchID(
         .onSuccess(
             [callback = std::move(onSuccess)](const NetworkResult &result) {
                 auto json = result.parseJson();
-                callback(json, result.getData());
+                callback(json);
             })
         .onError([callback = std::move(onError)](const NetworkResult &result) {
             callback(result);
@@ -41,8 +43,7 @@ void SeventvAPI::getUserByTwitchID(
 }
 
 void SeventvAPI::getUserByKickID(
-    uint64_t userID,
-    SuccessCallback<const QJsonObject &, const QByteArray &> &&onSuccess,
+    uint64_t userID, SuccessCallback<const QJsonObject &> &&onSuccess,
     ErrorCallback &&onError)
 {
     NetworkRequest(API_URL_KICK_USER.arg(userID), NetworkRequestType::Get)
@@ -50,7 +51,7 @@ void SeventvAPI::getUserByKickID(
         .onSuccess(
             [callback = std::move(onSuccess)](const NetworkResult &result) {
                 auto json = result.parseJson();
-                callback(json, result.getData());
+                callback(json);
             })
         .onError([callback = std::move(onError)](const NetworkResult &result) {
             callback(result);
@@ -58,17 +59,52 @@ void SeventvAPI::getUserByKickID(
         .execute();
 }
 
-void SeventvAPI::getEmoteSet(
-    const QString &emoteSet,
-    SuccessCallback<const QJsonObject &, const QByteArray &> &&onSuccess,
-    ErrorCallback &&onError)
+void SeventvAPI::getEmoteSet(const QString &emoteSet,
+                             SuccessCallback<const QJsonObject &> &&onSuccess,
+                             ErrorCallback &&onError)
 {
     NetworkRequest(API_URL_EMOTE_SET.arg(emoteSet), NetworkRequestType::Get)
         .timeout(25000)
         .onSuccess(
             [callback = std::move(onSuccess)](const NetworkResult &result) {
                 auto json = result.parseJson();
-                callback(json, result.getData());
+                callback(json);
+            })
+        .onError([callback = std::move(onError)](const NetworkResult &result) {
+            callback(result);
+        })
+        .execute();
+}
+
+void SeventvAPI::getCosmetics(const QStringList &ids,
+                              SuccessCallback<const QJsonObject &> &&onSuccess,
+                              ErrorCallback &&onError)
+{
+    QString list;
+    for (const auto &id : ids)
+    {
+        if (!list.isEmpty())
+        {
+            list.append(QLatin1Char(','));
+        }
+        list.append(QLatin1Char('"')).append(id).append(QLatin1Char('"'));
+    }
+
+    const QString query =
+        QStringLiteral("{cosmetics(list:[") + list +
+        QStringLiteral(
+            "]){paints{id name function color repeat angle image_url stops{at "
+            "color}shadows{x_offset y_offset radius color}}badges{id name tag "
+            "tooltip host{url files{name format width height}}}}}");
+
+    NetworkRequest(API_URL_GQL, NetworkRequestType::Post)
+        .json(QJsonObject{{QStringLiteral("query"), query}})
+        .timeout(20000)
+        .onSuccess(
+            [callback = std::move(onSuccess)](const NetworkResult &result) {
+                callback(result.parseJson()["data"]
+                             .toObject()["cosmetics"]
+                             .toObject());
             })
         .onError([callback = std::move(onError)](const NetworkResult &result) {
             callback(result);

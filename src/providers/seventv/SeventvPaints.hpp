@@ -26,9 +26,11 @@ public:
     void addPaint(const QJsonObject &paintJson);
     void assignPaintToUsers(const QString &paintID,
                             std::span<const seventv::eventapi::User> users);
+    void assignPaintToUser(const QString &paintID, const QString &userName);
     void clearPaintFromUsers(const QString &paintID,
                              std::span<const seventv::eventapi::User> users);
 
+    bool hasPaint(const QString &paintID) const;
     std::shared_ptr<Paint> getPaint(const QString &userName, bool kick) const;
 
 private:

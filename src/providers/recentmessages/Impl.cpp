@@ -6,10 +6,8 @@
 
 #include "common/Env.hpp"
 #include "messages/MessageBuilder.hpp"
-#include "providers/recentmessages/Api.hpp"
 #include "providers/twitch/IrcMessageHandler.hpp"
 #include "providers/twitch/TwitchChannel.hpp"
-#include "singletons/Settings.hpp"
 #include "util/Helpers.hpp"
 #include "util/VectorMessageSink.hpp"
 
@@ -58,10 +56,11 @@ std::vector<MessagePtr> buildRecentMessages(
 
     for (auto *message : messages)
     {
-        if (auto optReceivedTs = message->tags().get("rm-received-ts"))
+        if (message->tags().contains("rm-received-ts"))
         {
             const auto msgDate =
-                QDateTime::fromMSecsSinceEpoch(optReceivedTs->toLongLong())
+                QDateTime::fromMSecsSinceEpoch(
+                    message->tags().value("rm-received-ts").toLongLong())
                     .date();
 
             // Check if we need to insert a message stating that a new day began
@@ -92,18 +91,7 @@ QUrl constructRecentMessagesUrl(
     const std::optional<std::chrono::time_point<std::chrono::system_clock>>
         before)
 {
-    const auto &env = Env::get();
-    auto urlTemplate = env.recentMessagesApiUrl;
-    if (urlTemplate.isEmpty())
-    {
-        urlTemplate = getSettings()->messageHistoryUrl.getValue();
-    }
-    if (urlTemplate.isEmpty())
-    {
-        urlTemplate = DEFAULT_API_URL.toString();
-    }
-
-    QUrl url(urlTemplate.arg(name));
+    QUrl url(Env::get().recentMessagesApiUrl.arg(name));
     QUrlQuery urlQuery(url);
     if (!urlQuery.hasQueryItem("limit"))
     {

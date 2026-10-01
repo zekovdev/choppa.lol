@@ -59,6 +59,17 @@
                     "type": "TwitchModerationElement"
                 },
                 {
+                    "flags": "BadgeSevenTV",
+                    "link": {
+                        "type": "None",
+                        "value": ""
+                    },
+                    "tooltip": "",
+                    "trailingSpace": true,
+                    "type": "SeventvBadgeElement",
+                    "userID": "129546453"
+                },
+                {
                     "color": "#ffff0000",
                     "flags": "Username",
                     "link": {
@@ -102,8 +113,7 @@
                     "url": ""
                 }
             ],
-            "externalBadges": [
-            ],
+            "externalBadges": [],
             "flags": "Collapsed",
             "frozen": false,
             "id": "1bf2d49a-8b88-4116-81dd-5098f11726eb",
@@ -113,10 +123,8 @@
             "searchText": "ignoreduser  ignoreduser: my-highlight ",
             "serverReceivedTime": "2024-09-20T20:47:19Z",
             "timeoutUser": "",
-            "twitchBadgeInfos": {
-            },
-            "twitchBadges": [
-            ],
+            "twitchBadgeInfos": {},
+            "twitchBadges": [],
             "userID": "129546453",
             "usernameColor": "#ffff0000"
         }

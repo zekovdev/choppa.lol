@@ -7,9 +7,12 @@
 #include "ForwardDecl.hpp"
 #include "widgets/BasePopup.hpp"
 
+#include <QTimer>
+
 #include <memory>
 
 class QLineEdit;
+class QLabel;
 
 namespace chatterino {
 
@@ -20,6 +23,7 @@ class SearchPopup : public BasePopup
 {
 public:
     SearchPopup(QWidget *parent, Split *split = nullptr);
+    ~SearchPopup() override;
 
     virtual void addChannel(ChannelView &channel);
     void goToMessage(const MessagePtr &message);
@@ -34,29 +38,16 @@ public:
 protected:
     virtual void updateWindowTitle();
     void showEvent(QShowEvent *event) override;
+    void hideEvent(QHideEvent *event) override;
     bool eventFilter(QObject *object, QEvent *event) override;
     void themeChangedEvent() override;
 
 private:
     void initLayout();
     void search();
+    void ContinueSearch();
     void addShortcuts() override;
     std::vector<MessagePtr> buildSnapshot();
-
-    /**
-     * @brief Only retains those message from a list of messages that satisfy a
-     *        search query.
-     *
-     * @param text          the search query -- will be parsed for MessagePredicates
-     * @param channelName   name of the channel to be returned
-     * @param snapshot      list of messages to filter
-     * @param filterSet     channel filter to apply
-     *
-     * @return a ChannelPtr with "channelName" and the filtered messages from
-     *         "snapshot"
-     */
-    static ChannelPtr filter(const QString &text, const QString &channelName,
-                             const std::vector<MessagePtr> &snapshot);
 
     /**
      * @brief Checks the input for tags and registers their corresponding
@@ -69,6 +60,12 @@ private:
         const QString &input);
 
     std::vector<MessagePtr> snapshot_;
+    QTimer SearchTimer;
+    size_t SearchIndex = 0;
+    size_t SearchMatches = 0;
+    ChannelPtr SearchResults;
+    std::vector<std::unique_ptr<MessagePredicate>> SearchPredicates;
+    QLabel *SearchStatus = nullptr;
     QLineEdit *searchInput_{};
     ChannelView *channelView_{};
     QString channelName_{};

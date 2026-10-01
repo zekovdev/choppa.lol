@@ -16,6 +16,7 @@
 
 #include <QDialogButtonBox>
 #include <QEvent>
+#include <QFile>
 #include <QFormLayout>
 #include <QGroupBox>
 #include <QHeaderView>
@@ -152,6 +153,7 @@ SelectChannelDialog::SelectChannelDialog(QWidget *parent)
     : BaseWindow(
           {
               BaseWindow::Flags::EnableCustomFrame,
+              BaseWindow::ContentChrome,
               BaseWindow::Flags::Dialog,
               BaseWindow::DisableLayoutSave,
               BaseWindow::BoundsCheckOnShow,
@@ -161,13 +163,18 @@ SelectChannelDialog::SelectChannelDialog(QWidget *parent)
 {
     using AutoCheckedRadioButton = detail::AutoCheckedRadioButton;
 
-    this->setWindowTitle("Select a channel to join");
+    this->setWindowTitle("Open a channel");
+    this->setMinimumWidth(360);
+    QFile style(":/choppa/dialog.qss");
+    if (style.open(QIODevice::ReadOnly))
+        this->setStyleSheet(QString::fromUtf8(style.readAll()));
 
     this->tabFilter_.dialog = this;
 
     auto &ui = this->ui_;
     auto *rootLayout = new QVBoxLayout(this->getLayoutContainer());
-    rootLayout->setContentsMargins({});
+    rootLayout->setContentsMargins(10, 4, 10, 10);
+    rootLayout->setSpacing(8);
     ui.notebook = new MicroNotebook(this->getLayoutContainer());
     rootLayout->addWidget(ui.notebook, 1);
 

@@ -204,41 +204,40 @@ bool isIgnoredMessage(IgnoredMessageParameters &&params)
 
 void processIgnorePhrases(const std::vector<IgnorePhrase> &phrases,
                           QString &content,
-                          std::vector<TwitchSpecialOccurrence> &twitchSpecials)
+                          std::vector<TwitchEmoteOccurrence> &twitchEmotes)
 {
     using SizeType = QString::size_type;
 
-    auto removeSpecialsInRange = [&twitchSpecials](SizeType pos, SizeType len) {
-        // all specials outside the range come before `it`
-        // all specials in the range start at `it`
-        auto it = std::ranges::partition(twitchSpecials, [&](const auto &item) {
-            // returns true for specials outside the range
-            if (item.start < pos)
-            {
-                return item.start + item.length <= pos;
-            }
-            return item.start >= pos + len;
-        });
-        std::vector<TwitchSpecialOccurrence> specialsInRange(
-            it.begin(), twitchSpecials.end());
-        twitchSpecials.erase(it.begin(), twitchSpecials.end());
-        return specialsInRange;
+    auto removeEmotesInRange = [&twitchEmotes](SizeType pos, SizeType len) {
+        // all emotes outside the range come before `it`
+        // all emotes in the range start at `it`
+        auto it = std::partition(
+            twitchEmotes.begin(), twitchEmotes.end(),
+            [pos, len](const auto &item) {
+                // returns true for emotes outside the range
+                return !((item.start >= pos) && item.start < (pos + len));
+            });
+        std::vector<TwitchEmoteOccurrence> emotesInRange(it,
+                                                         twitchEmotes.end());
+        twitchEmotes.erase(it, twitchEmotes.end());
+        return emotesInRange;
     };
 
-    auto shiftIndicesAfter = [&twitchSpecials](int pos, int by) {
-        for (auto &item : twitchSpecials)
+    auto shiftIndicesAfter = [&twitchEmotes](int pos, int by) {
+        for (auto &item : twitchEmotes)
         {
             auto &index = item.start;
             if (index >= pos)
             {
                 index += by;
+                item.end += by;
             }
         }
     };
 
-    auto addReplEmotes = [&twitchSpecials](const IgnorePhrase &phrase,
-                                           const auto &midrepl,
-                                           SizeType startIndex) {
+    auto addReplEmotes = [&twitchEmotes](const IgnorePhrase &phrase,
+                                         const auto &midrepl,
+                                         SizeType startIndex) {
         if (!phrase.containsEmote())
         {
             return;
@@ -257,14 +256,12 @@ void processIgnorePhrases(const std::vector<IgnorePhrase> &phrases,
                         qCDebug(chatterinoTwitch)
                             << "emote null" << emote.first.string;
                     }
-                    twitchSpecials.push_back(TwitchSpecialOccurrence{
-                        .start = static_cast<int>(startIndex + pos),
-                        .length = static_cast<int>(emote.first.string.length()),
-                        .data =
-                            TwitchEmoteOccurrence{
-                                .ptr = emote.second,
-                                .name = emote.first,
-                            },
+                    twitchEmotes.push_back(TwitchEmoteOccurrence{
+                        static_cast<int>(startIndex + pos),
+                        static_cast<int>(startIndex + pos +
+                                         emote.first.string.length()),
+                        emote.second,
+                        emote.first,
                     });
                 }
             }
@@ -274,7 +271,7 @@ void processIgnorePhrases(const std::vector<IgnorePhrase> &phrases,
 
     auto replaceMessageAt = [&](const IgnorePhrase &phrase, SizeType from,
                                 SizeType length, const QString &replacement) {
-        auto removedSpecials = removeSpecialsInRange(from, length);
+        auto removedEmotes = removeEmotesInRange(from, length);
         content.replace(from, length, replacement);
         auto wordStart = from;
         while (wordStart > 0)
@@ -301,29 +298,23 @@ void processIgnorePhrases(const std::vector<IgnorePhrase> &phrases,
         auto midExtendedRef =
             QStringView{content}.mid(wordStart, wordEnd - wordStart);
 
-        for (auto &emote : removedSpecials)
+        for (auto &emote : removedEmotes)
         {
-            auto *data = std::get_if<TwitchEmoteOccurrence>(&emote.data);
-            if (!data)
-            {
-                continue;  // Nothing we can fix.
-            }
-            if (data->ptr == nullptr)
+            if (emote.ptr == nullptr)
             {
                 qCDebug(chatterinoTwitch)
-                    << "Invalid emote occurrence" << data->name.string;
+                    << "Invalid emote occurrence" << emote.name.string;
                 continue;
             }
             QRegularExpression emoteregex(
-                "\\b" + data->name.string + "\\b",
+                "\\b" + emote.name.string + "\\b",
                 QRegularExpression::UseUnicodePropertiesOption);
             auto match = emoteregex.matchView(midExtendedRef);
             if (match.hasMatch())
             {
-                emote.start =
-                    static_cast<int>(wordStart + match.capturedStart());
-                emote.length = static_cast<int>(match.capturedLength());
-                twitchSpecials.push_back(std::move(emote));
+                emote.start = static_cast<int>(from + match.capturedStart());
+                emote.end = static_cast<int>(from + match.capturedEnd());
+                twitchEmotes.push_back(std::move(emote));
             }
         }
 
@@ -363,7 +354,7 @@ void processIgnorePhrases(const std::vector<IgnorePhrase> &phrases,
 
                 replaceMessageAt(phrase, from, match.capturedLength(),
                                  replacement);
-                from += replacement.length();
+                from += phrase.getReplace().length();
                 iterations++;
                 if (iterations >= 128)
                 {

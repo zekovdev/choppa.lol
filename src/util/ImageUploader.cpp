@@ -138,14 +138,9 @@ bool importSettings(const QJsonObject &settingsObj, Settings &s)
     s.imageUploaderLink = parseUrl(settingsObj["URL"].toString());
 
     s.imageUploaderDeletionLink =
-        settingsObj["DeletionURL"].isString()
-            ? parseUrl(settingsObj["DeletionURL"].toString())
-            : QString{};
-
+        parseUrl(settingsObj["DeletionURL"].toString());
     s.imageUploaderHeaders =
-        settingsObj["Headers"].isObject()
-            ? parseHeaders(settingsObj["Headers"].toObject()).join(';')
-            : QString{};
+        parseHeaders(settingsObj["Headers"].toObject()).join(';');
 
     s.imageUploaderEnabled = true;
 

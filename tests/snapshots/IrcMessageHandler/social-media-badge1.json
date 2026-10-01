@@ -78,6 +78,17 @@
                     "type": "BadgeElement"
                 },
                 {
+                    "flags": "BadgeSevenTV",
+                    "link": {
+                        "type": "None",
+                        "value": ""
+                    },
+                    "tooltip": "",
+                    "trailingSpace": true,
+                    "type": "SeventvBadgeElement",
+                    "userID": "216501643"
+                },
+                {
                     "color": "#ffff4500",
                     "flags": "Username",
                     "link": {
@@ -130,8 +141,7 @@
                     "url": ""
                 }
             ],
-            "externalBadges": [
-            ],
+            "externalBadges": [],
             "flags": "Collapsed|UncategorizedNotification",
             "frozen": false,
             "id": "b468ef1c-f072-4ef9-a620-d7c4bdb8832f",
@@ -141,8 +151,7 @@
             "searchText": "gunny_q  gunny_q: Wooohooo, I got a social media badge! or another one ",
             "serverReceivedTime": "2026-04-06T03:02:37Z",
             "timeoutUser": "",
-            "twitchBadgeInfos": {
-            },
+            "twitchBadgeInfos": {},
             "twitchBadges": [
                 "social-sharing"
             ],
@@ -221,8 +230,7 @@
                     ]
                 }
             ],
-            "externalBadges": [
-            ],
+            "externalBadges": [],
             "flags": "System|DoNotTriggerNotification|UncategorizedNotification",
             "frozen": false,
             "id": "",
@@ -232,10 +240,8 @@
             "searchText": "Gunny_Q earned a Level 1 Social Media Badge!",
             "serverReceivedTime": "",
             "timeoutUser": "",
-            "twitchBadgeInfos": {
-            },
-            "twitchBadges": [
-            ],
+            "twitchBadgeInfos": {},
+            "twitchBadges": [],
             "userID": "",
             "usernameColor": "#ff000000"
         }

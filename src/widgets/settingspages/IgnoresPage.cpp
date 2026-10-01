@@ -97,8 +97,14 @@ void addUsersTab(IgnoresPage &page, LayoutCreator<QVBoxLayout> users,
 
         auto &setting = getSettings()->showBlockedUsersMessages;
 
-        setting.connect([combo](const int value) {
-            combo->setCurrentIndex(value);
+        auto Connections = std::make_shared<pajlada::Signals::SignalHolder>();
+        setting.connect(
+            [combo](const int value) {
+                combo->setCurrentIndex(value);
+            },
+            *Connections);
+        QObject::connect(combo, &QObject::destroyed, [Connections] {
+            Connections->clear();
         });
 
         QObject::connect(combo,

@@ -19,6 +19,8 @@ namespace chatterino {
 inline constexpr int NOTEBOOK_TAB_HEIGHT = 28;
 
 class SplitContainer;
+class Channel;
+using ChannelPtr = std::shared_ptr<Channel>;
 
 class NotebookTab : public Button
 {
@@ -27,15 +29,8 @@ class NotebookTab : public Button
 public:
     explicit NotebookTab(Notebook *notebook);
 
-    void refreshAndCommitSize(bool notify);
-    void commitSize(bool notify);
-    void refreshSize();
-
-    QSize minimumTabSize() const;
-    int minimumTabWidth() const;
-
-    void queueMove(QPoint to, bool animated);
-    void commitMove();
+    void updateSize();
+    void showContextMenu(const QPoint &globalPosition);
 
     QWidget *page{};
 
@@ -97,6 +92,7 @@ public:
     void tabSizeChanged();
 
     void growWidth(int width);
+    int normalTabWidth() const;
 
 protected:
     void themeChangedEvent() override;
@@ -125,6 +121,11 @@ protected:
 private:
     void showRenameDialog();
 
+    /// The channel used as emote context for this tab's title (its selected
+    /// split's channel, or an empty channel). Used for rendering emote codes in
+    /// the title and for the rename dialog's emote input.
+    ChannelPtr channelForEmotes() const;
+
     bool hasXButton() const;
     bool shouldDrawXButton() const;
     QRect getXRect() const;
@@ -152,12 +153,23 @@ private:
     QString customTitle_;
     QString defaultTitle_;
 
+    /// Remaining bounded repaint retries while the title's emoji images load.
+    int emojiRepaintsRemaining_ = 40;
+
+    /// Whether the current title contains an animated emote/emoji image;
+    /// updated on paint, drives GIF-timer repaints
+    bool titleAnimated_ = false;
+
+    /// Whether title images were still loading during the last paint
+    bool titleImagesPending_ = false;
+
     bool selected_{};
     bool mouseOver_{};
     bool mouseDown_{};
     bool mouseOverX_{};
     bool mouseDownX_{};
     bool isInLastRow_{};
+    int mouseWheelDelta_ = 0;
     NotebookTabLocation tabLocation_ = NotebookTabLocation::Top;
 
     HighlightState highlightState_ = HighlightState::None;
@@ -168,10 +180,6 @@ private:
     bool isRerun_{};
 
     int growWidth_ = 0;
-    QSize computedMinimumSize;
-
-    QPoint queuedMove;
-    bool queuedMoveAnimated = false;
 
     QMenu menu_;
     QMenu *closeMultipleTabsMenu_{};

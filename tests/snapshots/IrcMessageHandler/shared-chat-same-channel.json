@@ -98,6 +98,17 @@
                     "type": "BadgeElement"
                 },
                 {
+                    "flags": "BadgeSevenTV",
+                    "link": {
+                        "type": "None",
+                        "value": ""
+                    },
+                    "tooltip": "",
+                    "trailingSpace": true,
+                    "type": "SeventvBadgeElement",
+                    "userID": "106940612"
+                },
+                {
                     "color": "#ff00ff00",
                     "flags": "Username",
                     "link": {
@@ -141,8 +152,7 @@
                     "url": ""
                 }
             ],
-            "externalBadges": [
-            ],
+            "externalBadges": [],
             "flags": "Collapsed",
             "frozen": false,
             "id": "19ee1663-c14d-41cd-a4a2-30a4bb609c5a",
@@ -152,8 +162,7 @@
             "searchText": "creativewind  creativewind: Guys ",
             "serverReceivedTime": "2024-09-27T00:08:21Z",
             "timeoutUser": "",
-            "twitchBadgeInfos": {
-            },
+            "twitchBadgeInfos": {},
             "twitchBadges": [
                 "staff",
                 "turbo"

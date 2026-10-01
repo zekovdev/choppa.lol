@@ -17,6 +17,8 @@
 
 #include <QDebug>
 #include <QMargins>
+
+#include <algorithm>
 #include <QPainter>
 #include <QVarLengthArray>
 
@@ -28,8 +30,6 @@ using namespace chatterino;
 
 constexpr QMargins MARGIN{8, 4, 8, 4};
 constexpr qreal COMPACT_EMOTES_OFFSET = 4;
-/// Target width used to match Twitch's desktop chat layout.
-constexpr qreal ASCII_ART_WIDTH = 300.0;
 
 int maxUncollapsedLines()
 {
@@ -41,8 +41,10 @@ int maxUncollapsedLines()
 namespace chatterino {
 
 void MessageLayoutContainer::beginLayout(qreal width, float scale,
-                                         float imageScale, MessageFlags flags)
+                                         float imageScale, MessageFlags flags,
+                                         qreal extraTopPadding)
 {
+    this->extraTopPadding_ = extraTopPadding;
     this->elements_.clear();
     this->lines_.clear();
 
@@ -53,12 +55,7 @@ void MessageLayoutContainer::beginLayout(qreal width, float scale,
     this->lineHeight_ = 0;
     this->charIndex_ = 0;
 
-    const auto horizontalMargin =
-        int(MARGIN.left() * scale) + int(MARGIN.right() * scale);
-    this->width_ =
-        flags.has(MessageFlag::AsciiArt)
-            ? std::min(width, (ASCII_ART_WIDTH * scale) + horizontalMargin)
-            : width;
+    this->width_ = width;
     this->height_ = 0;
     this->scale_ = scale;
     this->imageScale_ = imageScale;
@@ -73,6 +70,22 @@ void MessageLayoutContainer::beginLayout(qreal width, float scale,
     this->isCollapsed_ = false;
     this->lineContainsRTL_ = false;
     this->anyReorderingDone_ = false;
+}
+
+bool MessageLayoutContainer::anyElementIntersects(const QRectF &rect) const
+{
+    return std::ranges::any_of(this->elements_, [&](const auto &element) {
+        return element->getRect().intersects(rect);
+    });
+}
+
+bool MessageLayoutContainer::anyImageElementIntersects(const QRectF &rect) const
+{
+    return std::ranges::any_of(this->elements_, [&](const auto &element) {
+        return element->getCreator().getFlags().has(
+                   MessageElementFlag::EmoteImage) &&
+               element->getRect().intersects(rect);
+    });
 }
 
 void MessageLayoutContainer::endLayout()
@@ -674,7 +687,8 @@ void MessageLayoutContainer::addElement(MessageLayoutElement *element,
     // top margin
     if (this->elements_.empty())
     {
-        this->currentY_ = int(MARGIN.top() * this->scale_);
+        this->currentY_ =
+            int(MARGIN.top() * this->scale_ + this->extraTopPadding_);
     }
 
     qreal elementLineHeight = element->getRect().height();

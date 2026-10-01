@@ -6,6 +6,8 @@
 
 namespace chatterino {
 
+class KickChatServer;
+
 class KickLiveUpdatesPrivate;
 class KickLiveUpdates
 {
@@ -19,7 +21,7 @@ public:
     void leaveRoom(uint64_t roomID, uint64_t channelID);
 
 private:
-    std::shared_ptr<KickLiveUpdatesPrivate> private_;
+    std::unique_ptr<KickLiveUpdatesPrivate> private_;
 
     friend KickLiveUpdatesPrivate;
 };

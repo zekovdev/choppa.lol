@@ -8,6 +8,7 @@
 #include "singletons/WindowManager.hpp"
 #include "util/FunctionEventFilter.hpp"
 #include "util/RapidJsonSerializeQString.hpp"
+#include "widgets/settingspages/ToggleSwitch.hpp"
 
 #include <QDebug>
 
@@ -25,7 +26,15 @@ bool filterItemsRec(QObject *object, const QString &query)
             widget->update();
         };
 
-        if (auto *checkBox = dynamic_cast<SCheckBox *>(child))
+        if (auto *toggle = dynamic_cast<ToggleSwitch *>(child))
+        {
+            if (!toggle->text().isEmpty())
+            {
+                setOpacity(toggle,
+                           toggle->text().contains(query, Qt::CaseInsensitive));
+            }
+        }
+        else if (auto *checkBox = dynamic_cast<SCheckBox *>(child))
         {
             setOpacity(checkBox,
                        checkBox->text().contains(query, Qt::CaseInsensitive));
@@ -95,7 +104,8 @@ QCheckBox *SettingsPage::createCheckBox(
     const QString &text, pajlada::Settings::Setting<bool> &setting,
     const QString &toolTipText)
 {
-    QCheckBox *checkbox = new SCheckBox(text);
+    QCheckBox *checkbox = new ToggleSwitch();
+    checkbox->setText(text);
     checkbox->setToolTip(toolTipText);
 
     // update when setting changes

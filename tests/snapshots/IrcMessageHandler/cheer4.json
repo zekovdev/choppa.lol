@@ -80,6 +80,17 @@
                     "type": "BadgeElement"
                 },
                 {
+                    "flags": "BadgeSevenTV",
+                    "link": {
+                        "type": "None",
+                        "value": ""
+                    },
+                    "tooltip": "",
+                    "trailingSpace": true,
+                    "type": "SeventvBadgeElement",
+                    "userID": "129793695"
+                },
+                {
                     "color": "#ff00ff7f",
                     "flags": "Username",
                     "link": {
@@ -123,8 +134,7 @@
                     "url": ""
                 }
             ],
-            "externalBadges": [
-            ],
+            "externalBadges": [],
             "flags": "Collapsed|CheerMessage",
             "frozen": false,
             "id": "60d8835b-23fa-418c-96ca-5874e5d5e8ba",
@@ -134,8 +144,7 @@
             "searchText": "exde_hun  exde_hun: PogChamp10 ",
             "serverReceivedTime": "2019-08-24T13:51:04Z",
             "timeoutUser": "",
-            "twitchBadgeInfos": {
-            },
+            "twitchBadgeInfos": {},
             "twitchBadges": [
                 "bits"
             ],

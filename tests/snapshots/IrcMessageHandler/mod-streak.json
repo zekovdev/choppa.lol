@@ -88,6 +88,17 @@
                     "type": "BadgeElement"
                 },
                 {
+                    "flags": "BadgeSevenTV",
+                    "link": {
+                        "type": "None",
+                        "value": ""
+                    },
+                    "tooltip": "",
+                    "trailingSpace": true,
+                    "type": "SeventvBadgeElement",
+                    "userID": "44850681"
+                },
+                {
                     "color": "#ffff7f50",
                     "flags": "Username",
                     "link": {
@@ -152,8 +163,7 @@
                     "url": ""
                 }
             ],
-            "externalBadges": [
-            ],
+            "externalBadges": [],
             "flags": "Collapsed|WatchStreak",
             "frozen": false,
             "id": "090939a1-18a5-4370-9066-b4f56512c320",
@@ -246,8 +256,7 @@
                     ]
                 }
             ],
-            "externalBadges": [
-            ],
+            "externalBadges": [],
             "flags": "System|DoNotTriggerNotification|WatchStreak",
             "frozen": false,
             "id": "",
@@ -257,10 +266,8 @@
             "searchText": "JCRouzer has been a moderator for 18 months!",
             "serverReceivedTime": "",
             "timeoutUser": "",
-            "twitchBadgeInfos": {
-            },
-            "twitchBadges": [
-            ],
+            "twitchBadgeInfos": {},
+            "twitchBadges": [],
             "userID": "",
             "usernameColor": "#ff000000"
         }

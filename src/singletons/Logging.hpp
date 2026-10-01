@@ -7,6 +7,7 @@
 #include "util/QStringHash.hpp"
 #include "util/ThreadGuard.hpp"
 
+#include <pajlada/signals/signalholder.hpp>
 #include <QString>
 
 #include <map>
@@ -37,6 +38,7 @@ class Logging : public ILogging
 {
 public:
     Logging(Settings &settings);
+    ~Logging() override;
 
     void addMessage(const QString &channelName, MessagePtr message,
                     const QString &platformName,
@@ -55,6 +57,7 @@ private:
     // Keeps the value of the `loggedChannels` settings
     std::unordered_set<ChannelName> onlyLogListedChannels;
     ThreadGuard threadGuard;
+    pajlada::Signals::SignalHolder SettingConnections;
 };
 
 }  // namespace chatterino

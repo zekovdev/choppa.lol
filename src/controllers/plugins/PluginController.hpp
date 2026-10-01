@@ -9,9 +9,9 @@
 #    include "common/websockets/WebSocketPool.hpp"
 #    include "controllers/commands/CommandContext.hpp"
 #    include "controllers/plugins/Plugin.hpp"
-#    include "util/FunctionRef.hpp"
 
 #    include <pajlada/signals/signal.hpp>
+#    include <pajlada/signals/signalholder.hpp>
 #    include <QDir>
 #    include <QFileInfo>
 #    include <QJsonArray>
@@ -46,11 +46,8 @@ public:
     // This is required to be public because of c functions
     Plugin *getPluginByStatePtr(lua_State *L);
 
-    /// Run `cb` on every loaded plugin, including those with load errors
-    void forEachPlugin(
-        FunctionRef<void(const std::unique_ptr<Plugin> &)>) const;
-
-    const std::map<QString, AnyPlugin> &allPlugins() const;
+    // TODO: make a function that iterates plugins that aren't errored/enabled
+    const std::map<QString, std::unique_ptr<Plugin>> &plugins() const;
 
     /**
      * @brief Reload plugin given by id
@@ -73,7 +70,6 @@ public:
     WebSocketPool &webSocketPool();
 
     pajlada::Signals::Signal<Plugin *> onPluginLoaded;
-    pajlada::Signals::NoArgSignal onPluginsUpdated;
 
 private:
     void loadPlugins();
@@ -87,17 +83,13 @@ private:
 
     static void loadChatterinoLib(lua_State *l);
     bool tryLoadFromDir(const QDir &pluginDir);
-
-    void queueChangeNotification();
-
-    std::map<QString, AnyPlugin> plugins_;
+    std::map<QString, std::unique_ptr<Plugin>> plugins_;
     WebSocketPool webSocketPool_;
+    pajlada::Signals::SignalHolder SettingConnections;
 
     std::vector<
         std::pair<std::string, std::function<sol::object(sol::state_view)>>>
         loaders_;
-
-    bool changeNotificationQueued = false;
 
     // This is for tests, pay no attention
     friend class PluginControllerAccess;

@@ -17,16 +17,18 @@ void GIFTimer::initialize()
     this->timer.setInterval(GIF_FRAME_LENGTH);
     this->timer.setTimerType(Qt::PreciseTimer);
 
-    getSettings()->animateEmotes.connect([this](bool enabled, auto) {
-        if (enabled)
-        {
-            this->timer.start();
-        }
-        else
-        {
-            this->timer.stop();
-        }
-    });
+    getSettings()->animateEmotes.connect(
+        [this](bool enabled, auto) {
+            if (enabled)
+            {
+                this->timer.start();
+            }
+            else
+            {
+                this->timer.stop();
+            }
+        },
+        this->SettingConnections);
 
     QObject::connect(&this->timer, &QTimer::timeout, [this] {
         if (getSettings()->animationsWhenFocused &&

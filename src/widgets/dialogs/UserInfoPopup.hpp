@@ -48,6 +48,7 @@ public:
                  const ChannelPtr &openingChannel);
 
 protected:
+    void paintEvent(QPaintEvent *event) override;
     void themeChangedEvent() override;
     void scaleChangedEvent(float scale) override;
     void windowDeactivationEvent() override;
@@ -81,6 +82,7 @@ private:
 
     Split *split_;
 
+    std::shared_ptr<bool> userDataLifetime_ = std::make_shared<bool>(true);
     QString userName_;
     QString userId_;
     QString avatarUrl_;

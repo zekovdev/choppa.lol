@@ -63,6 +63,13 @@ public:
         return this->isCaseSensitive_;
     }
 
+    [[nodiscard]] bool operator==(const Nickname &other) const
+    {
+        return this->name_ == other.name_ && this->replace_ == other.replace_ &&
+               this->isRegex_ == other.isRegex_ &&
+               this->isCaseSensitive_ == other.isCaseSensitive_;
+    }
+
     [[nodiscard]] std::optional<QString> match(
         const QString &usernameText) const
     {

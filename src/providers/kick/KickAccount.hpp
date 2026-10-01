@@ -17,7 +17,6 @@ struct KickAccountData {
     uint64_t userID = 0;
     QString clientID;
     QString clientSecret;
-    QString publicProxy;
     QString authToken;
     QString refreshToken;
     QDateTime expiresAt;
@@ -64,10 +63,6 @@ public:
     {
         return this->clientSecret_;
     }
-    QString publicProxy() const
-    {
-        return this->publicProxy_;
-    }
     QString authToken() const
     {
         return this->authToken_;
@@ -109,7 +104,6 @@ private:
     uint64_t userID_ = 0;
     QString clientID_;
     QString clientSecret_;
-    QString publicProxy_;
     QString authToken_;
     QString refreshToken_;
     QDateTime expiresAt_;

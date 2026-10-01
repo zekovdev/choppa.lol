@@ -107,15 +107,12 @@ void FfzBadges::load()
                     auto userIDString = QString::number(user.toInt());
 
                     auto [userBadges, created] = this->userBadges.emplace(
-                        std::move(userIDString),
-                        QVarLengthArray<int, 2>{badgeID});
+                        std::make_pair<QString, std::set<int>>(
+                            std::move(userIDString), {badgeID}));
                     if (!created)
                     {
                         // User already had a badge assigned
-                        if (!userBadges->second.contains(badgeID))
-                        {
-                            userBadges->second.emplace_back(badgeID);
-                        }
+                        userBadges->second.emplace(badgeID);
                     }
                 }
             }
@@ -141,15 +138,11 @@ void FfzBadges::assignBadgeToUser(const UserId &userID, int badgeID)
     auto it = this->userBadges.find(userID.string);
     if (it != this->userBadges.end())
     {
-        if (!it->second.contains(badgeID))
-        {
-            it->second.emplace_back(badgeID);
-        }
+        it->second.emplace(badgeID);
     }
     else
     {
-        this->userBadges.emplace(userID.string,
-                                 QVarLengthArray<int, 2>{badgeID});
+        this->userBadges.emplace(userID.string, std::set{badgeID});
     }
 }
 

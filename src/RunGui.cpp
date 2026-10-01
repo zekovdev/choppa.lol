@@ -21,6 +21,7 @@
 
 #include <QApplication>
 #include <QFile>
+#include <QFontDatabase>
 #include <QPalette>
 #include <QStyleFactory>
 #include <Qt>
@@ -54,20 +55,20 @@ void installCustomPalette()
     // https://stackoverflow.com/questions/15035767/is-the-qt-5-dark-fusion-theme-available-for-windows
     auto dark = QApplication::palette();
 
-    dark.setColor(QPalette::Window, QColor(22, 22, 22));
-    dark.setColor(QPalette::WindowText, Qt::white);
-    dark.setColor(QPalette::Text, Qt::white);
-    dark.setColor(QPalette::Base, QColor("#333"));
-    dark.setColor(QPalette::AlternateBase, QColor("#444"));
-    dark.setColor(QPalette::ToolTipBase, Qt::white);
-    dark.setColor(QPalette::ToolTipText, Qt::black);
-    dark.setColor(QPalette::Dark, QColor(35, 35, 35));
-    dark.setColor(QPalette::Shadow, QColor(20, 20, 20));
-    dark.setColor(QPalette::Button, QColor(70, 70, 70));
-    dark.setColor(QPalette::ButtonText, Qt::white);
+    dark.setColor(QPalette::Window, QColor("#0c0c0e"));
+    dark.setColor(QPalette::WindowText, QColor("#ededed"));
+    dark.setColor(QPalette::Text, QColor("#ededed"));
+    dark.setColor(QPalette::Base, QColor("#101013"));
+    dark.setColor(QPalette::AlternateBase, QColor("#161619"));
+    dark.setColor(QPalette::ToolTipBase, QColor("#0b0b0b"));
+    dark.setColor(QPalette::ToolTipText, QColor("#f0f0f0"));
+    dark.setColor(QPalette::Dark, QColor("#0a0a0c"));
+    dark.setColor(QPalette::Shadow, QColor("#050506"));
+    dark.setColor(QPalette::Button, QColor("#1d1d21"));
+    dark.setColor(QPalette::ButtonText, QColor("#ededed"));
     dark.setColor(QPalette::BrightText, Qt::red);
-    dark.setColor(QPalette::Link, QColor(42, 130, 218));
-    dark.setColor(QPalette::Highlight, QColor(42, 130, 218));
+    dark.setColor(QPalette::Link, QColor("#29b6f6"));
+    dark.setColor(QPalette::Highlight, QColor("#29b6f6"));
     dark.setColor(QPalette::HighlightedText, Qt::white);
     dark.setColor(QPalette::PlaceholderText, QColor(127, 127, 127));
 
@@ -242,12 +243,22 @@ void clearCrashes(QDir dir)
 }
 }  // namespace
 
-void runGui(QApplication &a, const Modes &modes, const Paths &paths,
-            Settings &settings, const Args &args, Updates &updates)
+void runGui(QApplication &a, const Paths &paths, Settings &settings,
+            const Args &args, Updates &updates)
 {
     initQt(args);
+
+    a.setStyleSheet(
+        "QMenu{background:#111111;border:1px solid #242424;padding:6px;}"
+        "QMenu::item{padding:8px 20px;color:#cccccc;border-radius:6px;}"
+        "QMenu::item:selected{background:#242424;color:#ffffff;}"
+        "QMenu::separator{height:1px;background:#242424;margin:4px 8px;}");
+
     initResources();
     initSignalHandler();
+
+    QFontDatabase::addApplicationFont(":/fonts/Anton-Regular.ttf");
+    QFontDatabase::addApplicationFont(":/fonts/Inter.ttf");
 
 #ifdef Q_OS_WIN
     if (args.crashRecovery)
@@ -290,7 +301,7 @@ void runGui(QApplication &a, const Modes &modes, const Paths &paths,
     });
 
     Application app(settings, paths, args, updates);
-    app.initialize(settings, modes, paths);
+    app.initialize(settings, paths);
     app.run();
 
     chatterino::NetworkManager::deinit();

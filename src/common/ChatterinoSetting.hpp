@@ -10,23 +10,58 @@
 #include <QSize>
 #include <QString>
 
+#include <functional>
 #include <memory>
 #include <string>
 #include <type_traits>
 
 namespace chatterino {
 
-void _registerSetting(std::weak_ptr<pajlada::Settings::SettingData> setting);
+struct SettingSnapshot {
+    std::function<bool()> changed;
+    std::function<void()> restore;
+};
+
+using SettingSnapshotFactory = std::function<SettingSnapshot()>;
+
+void _registerSetting(std::weak_ptr<pajlada::Settings::SettingData> setting,
+                      std::weak_ptr<bool> lifetime,
+                      SettingSnapshotFactory makeSnapshot);
 
 template <typename Type>
 class ChatterinoSetting : public pajlada::Settings::Setting<Type>
 {
+    std::shared_ptr<bool> registrationLifetime_ = std::make_shared<bool>(true);
+
+    void registerForSnapshots()
+    {
+        if constexpr (std::is_same_v<Type, QSize>)
+        {
+            return;
+        }
+        else
+        {
+            const std::weak_ptr<bool> lifetime = this->registrationLifetime_;
+            _registerSetting(this->getData(), lifetime, [this, lifetime] {
+                const Type original = this->getValueCopy();
+                return SettingSnapshot{[this, lifetime, original] {
+                                           return !lifetime.expired() &&
+                                                  this->getValue() != original;
+                                       },
+                                       [this, lifetime, original] {
+                                           if (!lifetime.expired())
+                                               this->setValue(original);
+                                       }};
+            });
+        }
+    }
+
 public:
     ChatterinoSetting(const std::string &path)
         : pajlada::Settings::Setting<Type>(
               path, pajlada::Settings::SettingOption::CompareBeforeSet)
     {
-        _registerSetting(this->getData());
+        this->registerForSnapshots();
     }
 
     ChatterinoSetting(const std::string &path, const Type &defaultValue)
@@ -34,7 +69,7 @@ public:
               path, defaultValue,
               pajlada::Settings::SettingOption::CompareBeforeSet)
     {
-        _registerSetting(this->getData());
+        this->registerForSnapshots();
     }
 
     template <typename T2>
@@ -80,7 +115,6 @@ public:
     EnumSetting(const std::string &path, const Enum &defaultValue)
         : ChatterinoSetting<Underlying>(path, Underlying(defaultValue))
     {
-        _registerSetting(this->getData());
     }
 
     EnumSetting<Enum> &operator=(Enum newValue)
@@ -109,12 +143,30 @@ public:
 template <typename Enum>
 class EnumStringSetting : public pajlada::Settings::Setting<QString>
 {
+    std::shared_ptr<bool> registrationLifetime_ = std::make_shared<bool>(true);
+
+    void registerForSnapshots()
+    {
+        const std::weak_ptr<bool> lifetime = this->registrationLifetime_;
+        _registerSetting(this->getData(), lifetime, [this, lifetime] {
+            const QString original = this->getValueCopy();
+            return SettingSnapshot{[this, lifetime, original] {
+                                       return !lifetime.expired() &&
+                                              this->getValue() != original;
+                                   },
+                                   [this, lifetime, original] {
+                                       if (!lifetime.expired())
+                                           this->setValue(original);
+                                   }};
+        });
+    }
+
 public:
     EnumStringSetting(const std::string &path, const Enum &defaultValue_)
         : pajlada::Settings::Setting<QString>(path)
         , defaultValue(defaultValue_)
     {
-        _registerSetting(this->getData());
+        this->registerForSnapshots();
     }
 
     template <typename T2>

@@ -259,15 +259,16 @@ void Emojis::sortEmojis()
 
 void Emojis::loadEmojiSet()
 {
-    getSettings()->emojiSet.connect([this](const auto &emojiSet) {
-        auto setCapability = qmagicenum::enumCast<EmojiData::Capability>(
-                                 emojiSet, qmagicenum::CASE_INSENSITIVE)
-                                 .value_or(EmojiData::Capability::Google);
+    getSettings()->emojiSet.connect(
+        [this](const auto &emojiSet) {
+            auto setCapability = qmagicenum::enumCast<EmojiData::Capability>(
+                                     emojiSet, qmagicenum::CASE_INSENSITIVE)
+                                     .value_or(EmojiData::Capability::Google);
 
-        for (const auto &emoji : this->emojis)
-        {
-            QString emojiSetToUse = emojiSet;
-            // clang-format off
+            for (const auto &emoji : this->emojis)
+            {
+                QString emojiSetToUse = emojiSet;
+                // clang-format off
             static std::map<QString, QString, QCompareCaseInsensitive> emojiSets = {
                 // JSDELIVR
                 // {"Twitter", "https://cdn.jsdelivr.net/npm/emoji-datasource-twitter@4.0.4/img/twitter/64/"},
@@ -288,31 +289,33 @@ void Emojis::loadEmojiSet()
                 // {"Apple", "https://chatterino2-emoji-cdn.pajlada.se/file/c2-emojis/emojis-v1/apple/64/"},
                 // {"Google", "https://chatterino2-emoji-cdn.pajlada.se/file/c2-emojis/emojis-v1/google/64/"},
             };
-            // clang-format on
+                // clang-format on
 
-            // Both Twitter/Twemoji and Google have all images
-            if (!emoji->capabilities.has(setCapability))
-            {
-                emojiSetToUse = QStringLiteral("Twitter");
-            }
+                // Both Twitter/Twemoji and Google have all images
+                if (!emoji->capabilities.has(setCapability))
+                {
+                    emojiSetToUse = QStringLiteral("Twitter");
+                }
 
-            QString code = emoji->unifiedCode.toLower();
-            QString urlPrefix =
-                "https://pajbot.com/static/emoji-v2/img/twitter/64/";
-            auto it = emojiSets.find(emojiSetToUse);
-            if (it != emojiSets.end())
-            {
-                urlPrefix = it->second;
+                QString code = emoji->unifiedCode.toLower();
+                QString urlPrefix =
+                    "https://pajbot.com/static/emoji-v2/img/twitter/64/";
+                auto it = emojiSets.find(emojiSetToUse);
+                if (it != emojiSets.end())
+                {
+                    urlPrefix = it->second;
+                }
+                QString url = urlPrefix + code + ".png";
+                emoji->emote = std::make_shared<Emote>(Emote{
+                    .name = EmoteName{emoji->value},
+                    .images = ImageSet{Image::fromUrl({url}, 0.35, {64, 64})},
+                    .tooltip =
+                        Tooltip{":" + emoji->shortCodes[0] + ":<br/>Emoji"},
+                    .homePage = Url{},
+                });
             }
-            QString url = urlPrefix + code + ".png";
-            emoji->emote = std::make_shared<Emote>(Emote{
-                .name = EmoteName{emoji->value},
-                .images = ImageSet{Image::fromUrl({url}, 0.35, {64, 64})},
-                .tooltip = Tooltip{":" + emoji->shortCodes[0] + ":<br/>Emoji"},
-                .homePage = Url{},
-            });
-        }
-    });
+        },
+        this->SettingConnections);
 }
 
 std::vector<std::variant<EmotePtr, QStringView>> Emojis::parse(

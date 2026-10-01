@@ -6,6 +6,7 @@
 
 #include "widgets/buttons/Button.hpp"
 
+#include <QFontMetricsF>
 #include <QHBoxLayout>
 #include <QLabel>
 
@@ -45,14 +46,33 @@ public:
     /// Sets the label to display rich text (Qt's HTML subset)
     void enableRichText();
 
+    /// @brief Sets the label's alignment.
+    ///
+    /// By default the label is centered. Left-aligned labels clip on the
+    /// right when there isn't enough room, instead of on both sides.
+    void setLabelAlignment(Qt::Alignment alignment);
+
+    /// @brief Elide the text with "…" when there isn't enough room.
+    ///
+    /// Not supported together with rich text.
+    void setElide(bool elide);
+
+    QSize sizeHint() const override;
+
 protected:
     void paintContent(QPainter &painter) override;
+    void resizeEvent(QResizeEvent *event) override;
+    void changeEvent(QEvent *event) override;
 
 private:
     void updatePadding();
+    void applyElidedText();
+    QFontMetricsF deviceMetrics() const;
 
     QHBoxLayout layout_;
     QLabel label_;
+    QString fullText_;
+    bool elide_ = false;
     QSize padding_;
 };
 

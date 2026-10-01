@@ -78,6 +78,17 @@
                     "type": "BadgeElement"
                 },
                 {
+                    "flags": "BadgeSevenTV",
+                    "link": {
+                        "type": "None",
+                        "value": ""
+                    },
+                    "tooltip": "",
+                    "trailingSpace": true,
+                    "type": "SeventvBadgeElement",
+                    "userID": "117691339"
+                },
+                {
                     "color": "#ffdaa521",
                     "flags": "Username",
                     "link": {
@@ -163,8 +174,7 @@
                     "url": ""
                 }
             ],
-            "externalBadges": [
-            ],
+            "externalBadges": [],
             "flags": "Collapsed",
             "frozen": false,
             "id": "7be87072-bf24-4fa3-b3df-0ea6fa5f1474",
@@ -174,8 +184,7 @@
             "searchText": "mm2pl  mm2pl: Kappa Keepo PogChamp ",
             "serverReceivedTime": "2022-09-03T10:31:42Z",
             "timeoutUser": "",
-            "twitchBadgeInfos": {
-            },
+            "twitchBadgeInfos": {},
             "twitchBadges": [
                 "no_audio"
             ],

@@ -6,7 +6,6 @@
 
 #include "common/network/NetworkRequest.hpp"
 #include "common/network/NetworkResult.hpp"
-#include "common/network/RetryingGet.hpp"
 #include "common/QLogging.hpp"
 #include "messages/Emote.hpp"
 #include "messages/Image.hpp"
@@ -224,7 +223,7 @@ std::shared_ptr<const EmoteMap> FfzEmotes::emotes() const
     return this->global_.get();
 }
 
-std::optional<EmotePtr> FfzEmotes::emote(EmoteNameView name) const
+std::optional<EmotePtr> FfzEmotes::emote(const EmoteName &name) const
 {
     auto emotes = this->global_.get();
     auto it = emotes->find(name);
@@ -281,13 +280,14 @@ void FfzEmotes::loadChannel(
 {
     qCDebug(LOG) << "Reload FFZ Channel Emotes for channel" << channelID;
 
-    network::fetchWithBackoff(
-        "https://api.frankerfacez.com/v1/room/id/" + channelID,
-        [emoteCallback = std::move(emoteCallback),
-         modBadgeCallback = std::move(modBadgeCallback),
-         vipBadgeCallback = std::move(vipBadgeCallback),
-         channelBadgesCallback = std::move(channelBadgesCallback), channel,
-         channelID, manualRefresh](const auto &result) {
+    NetworkRequest("https://api.frankerfacez.com/v1/room/id/" + channelID)
+
+        .timeout(20000)
+        .onSuccess([emoteCallback = std::move(emoteCallback),
+                    modBadgeCallback = std::move(modBadgeCallback),
+                    vipBadgeCallback = std::move(vipBadgeCallback),
+                    channelBadgesCallback = std::move(channelBadgesCallback),
+                    channel, channelID, manualRefresh](const auto &result) {
             writeProviderEmotesCache(channelID, "frankerfacez",
                                      result.getData());
             const auto json = result.parseJson();
@@ -318,40 +318,41 @@ void FfzEmotes::loadChannel(
                     shared->addSystemMessage(CHANNEL_HAS_NO_EMOTES);
                 }
             }
-        },
-        [channelID, channel, manualRefresh, cacheHit](const auto &result) {
-            auto shared = channel.lock();
-            if (!shared)
-            {
-                return;
-            }
+        })
+        .onError(
+            [channelID, channel, manualRefresh, cacheHit](const auto &result) {
+                auto shared = channel.lock();
+                if (!shared)
+                {
+                    return;
+                }
 
-            if (result.status() == 404)
-            {
-                // User does not have any FFZ emotes
-                if (manualRefresh)
+                if (result.status() == 404)
                 {
-                    shared->addSystemMessage(CHANNEL_HAS_NO_EMOTES);
+                    // User does not have any FFZ emotes
+                    if (manualRefresh)
+                    {
+                        shared->addSystemMessage(CHANNEL_HAS_NO_EMOTES);
+                    }
                 }
-            }
-            else
-            {
-                // TODO: Auto retry in case of a timeout, with a delay
-                auto errorString = result.formatError();
-                qCWarning(LOG) << "Error fetching FFZ emotes for channel"
-                               << channelID << ", error" << errorString;
-                shared->addSystemMessage(
-                    QStringLiteral("Failed to fetch FrankerFaceZ channel "
-                                   "emotes. (Error: %1)")
-                        .arg(errorString));
-                if (cacheHit)
+                else
                 {
+                    // TODO: Auto retry in case of a timeout, with a delay
+                    auto errorString = result.formatError();
+                    qCWarning(LOG) << "Error fetching FFZ emotes for channel"
+                                   << channelID << ", error" << errorString;
                     shared->addSystemMessage(
-                        "Using cached FrankerFaceZ emotes as fallback.");
+                        QStringLiteral("Failed to fetch FrankerFaceZ channel "
+                                       "emotes. (Error: %1)")
+                            .arg(errorString));
+                    if (cacheHit)
+                    {
+                        shared->addSystemMessage(
+                            "Using cached FrankerFaceZ emotes as fallback.");
+                    }
                 }
-            }
-        },
-        20000);
+            })
+        .execute();
 }
 
 }  // namespace chatterino

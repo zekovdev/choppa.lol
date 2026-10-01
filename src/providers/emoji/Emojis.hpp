@@ -7,6 +7,7 @@
 #include "common/FlagsEnum.hpp"
 #include "providers/emoji/EmojiStyle.hpp"
 
+#include <pajlada/signals/signalholder.hpp>
 #include <QMap>
 #include <QRegularExpression>
 #include <QVector>
@@ -92,6 +93,7 @@ private:
     QMap<QChar, QVector<std::shared_ptr<EmojiData>>> emojiFirstByte_;
 
     bool loaded_ = false;
+    pajlada::Signals::SignalHolder SettingConnections;
 };
 
 }  // namespace chatterino

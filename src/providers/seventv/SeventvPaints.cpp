@@ -43,7 +43,7 @@ QGradientStops parsePaintStops(const QJsonArray &stops)
     QGradientStops parsedStops;
     double lastStop = -1;
 
-    for (const auto stop : stops)
+    for (const auto &stop : stops)
     {
         const auto stopObject = stop.toObject();
 
@@ -70,7 +70,7 @@ std::vector<PaintDropShadow> parseDropShadows(const QJsonArray &dropShadows)
 {
     std::vector<PaintDropShadow> parsedDropShadows;
 
-    for (const auto shadow : dropShadows)
+    for (const auto &shadow : dropShadows)
     {
         const auto shadowObject = shadow.toObject();
 
@@ -229,6 +229,36 @@ void SeventvPaints::assignPaintToUsers(
             getApp()->getWindows()->invalidateChannelViewBuffers();
         });
     }
+}
+
+void SeventvPaints::assignPaintToUser(const QString &paintID,
+                                     const QString &userName)
+{
+    std::unique_lock lock(this->mutex_);
+
+    const auto paintIt = this->knownPaints_.find(paintID);
+    if (paintIt == this->knownPaints_.end())
+    {
+        return;
+    }
+
+    auto &slot = this->twitchPaintMap_[userName.toLower()];
+    if (slot == paintIt->second)
+    {
+        return;
+    }
+    slot = paintIt->second;
+    lock.unlock();
+
+    postToThread([] {
+        getApp()->getWindows()->invalidateChannelViewBuffers();
+    });
+}
+
+bool SeventvPaints::hasPaint(const QString &paintID) const
+{
+    std::shared_lock lock(this->mutex_);
+    return this->knownPaints_.contains(paintID);
 }
 
 void SeventvPaints::clearPaintFromUsers(

@@ -6,13 +6,21 @@
 
 #include <QAbstractButton>
 #include <QDialogButtonBox>
+#include <QFile>
 #include <QKeyEvent>
 
 namespace chatterino {
 
 BasePopup::BasePopup(FlagsEnum<Flags> _flags, QWidget *parent)
-    : BaseWindow(_flags | Dialog, parent)
+    : BaseWindow(_flags | Dialog |
+                     (_flags.has(Frameless)
+                          ? FlagsEnum<Flags>{}
+                          : FlagsEnum<Flags>{EnableCustomFrame, ContentChrome}),
+                 parent)
 {
+    QFile style(":/choppa/dialog.qss");
+    if (style.open(QFile::ReadOnly))
+        this->setStyleSheet(QString::fromUtf8(style.readAll()));
 }
 
 void BasePopup::keyPressEvent(QKeyEvent *e)

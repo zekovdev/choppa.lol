@@ -7,6 +7,7 @@
 #include "Application.hpp"
 #include "common/Args.hpp"
 #include "common/Common.hpp"
+#include "common/Credentials.hpp"
 #include "common/Modes.hpp"
 #include "common/QLogging.hpp"
 #include "common/Version.hpp"
@@ -14,7 +15,6 @@
 #include "controllers/hotkeys/HotkeyController.hpp"
 #include "providers/twitch/TwitchAccount.hpp"
 #include "providers/twitch/TwitchIrcServer.hpp"
-#include "singletons/Resources.hpp"
 #include "singletons/Settings.hpp"
 #include "singletons/StreamerMode.hpp"
 #include "singletons/Theme.hpp"
@@ -22,10 +22,7 @@
 #include "singletons/WindowManager.hpp"
 #include "util/RapidJsonSerializeQSize.hpp"
 #include "widgets/AccountSwitchPopup.hpp"
-#include "widgets/buttons/InitUpdateButton.hpp"
-#include "widgets/buttons/LabelButton.hpp"
-#include "widgets/buttons/PixmapButton.hpp"
-#include "widgets/buttons/TitlebarButton.hpp"
+#include "widgets/ChoppaShell.hpp"
 #include "widgets/dialogs/SettingsDialog.hpp"
 #include "widgets/dialogs/switcher/QuickSwitcherPopup.hpp"
 #include "widgets/dialogs/UpdateDialog.hpp"
@@ -56,13 +53,13 @@
 namespace chatterino {
 
 Window::Window(WindowType type, QWidget *parent)
-    : BaseWindow(
-          {BaseWindow::EnableCustomFrame, BaseWindow::ClearBuffersOnDpiChange},
-          parent)
+    : BaseWindow({BaseWindow::EnableCustomFrame, BaseWindow::ContentChrome,
+                  BaseWindow::ClearBuffersOnDpiChange},
+                 parent)
     , type_(type)
     , notebook_(new SplitNotebook(this))
 {
-    this->addCustomTitlebarButtons();
+    // The Choppa shell owns all window and account controls.
     this->addShortcuts();
     this->addLayout();
 
@@ -78,7 +75,8 @@ Window::Window(WindowType type, QWidget *parent)
 
     if (type == WindowType::Main)
     {
-        this->resize(int(600 * this->scale()), int(500 * this->scale()));
+        this->resize(int(780 * this->scale()), int(510 * this->scale()));
+        this->setMinimumSize(520, 340);
 #ifdef Q_OS_LINUX
         if (this->theme->window.background.alpha() != 255)
         {
@@ -120,16 +118,6 @@ WindowType Window::getType()
 SplitNotebook &Window::getNotebook()
 {
     return *this->notebook_;
-}
-
-void Window::setPopupID(size_t id)
-{
-    this->popupID_ = id;
-}
-
-std::optional<size_t> Window::popupID() const
-{
-    return this->popupID_;
 }
 
 bool Window::event(QEvent *event)
@@ -203,7 +191,7 @@ void Window::addLayout()
 {
     auto *layout = new QVBoxLayout();
 
-    layout->addWidget(this->notebook_);
+    layout->addWidget(new ChoppaShell(this, this->notebook_));
     this->getLayoutContainer()->setLayout(layout);
 
     // set margin
@@ -213,83 +201,8 @@ void Window::addLayout()
     this->notebook_->setShowAddButton(true);
 }
 
-void Window::addCustomTitlebarButtons()
-{
-    if (!this->hasCustomWindowFrame())
-    {
-        return;
-    }
-    if (this->type_ != WindowType::Main)
-    {
-        return;
-    }
-
-    // settings
-    this->addTitleBarButton<TitleBarButton>(
-        [this] {
-            getApp()->getWindows()->showSettingsDialog(this);
-        },
-        TitleBarButtonStyle::Settings);
-
-    // updates
-    auto *update = this->addTitleBarButton<PixmapButton>([] {});
-
-    initUpdateButton(*update, [] {}, this->signalHolder_);
-
-    // account
-    this->userLabel_ = this->addTitleBarLabel([this] {
-        getApp()->getWindows()->showAccountSelectPopup(
-            this->userLabel_->mapToGlobal(
-                this->userLabel_->rect().bottomLeft()));
-    });
-    this->userLabel_->setMinimumWidth(20 * this->scale());
-
-    // streamer mode
-    this->streamerModeTitlebarIcon_ =
-        this->addTitleBarButton<PixmapButton>([this] {
-            getApp()->getWindows()->showSettingsDialog(
-                this, SettingsDialogPreference::StreamerMode);
-        });
-    QObject::connect(getApp()->getStreamerMode(), &IStreamerMode::changed, this,
-                     &Window::updateStreamerModeIcon);
-
-    // Update initial state
-    this->updateStreamerModeIcon();
-}
-
-void Window::updateStreamerModeIcon()
-{
-    // A duplicate of this code is in SplitNotebook class (in Notebook.{c,h}pp)
-    // That one is the one near splits (on linux and mac or non-main windows on Windows)
-    // This copy handles the TitleBar icon in Window (main window on Windows)
-    if (this->streamerModeTitlebarIcon_ == nullptr)
-    {
-        return;
-    }
-#ifdef Q_OS_WIN
-    assert(this->getType() == WindowType::Main);
-    if (getTheme()->isLightTheme())
-    {
-        this->streamerModeTitlebarIcon_->setPixmap(
-            getResources().buttons.streamerModeEnabledLight);
-    }
-    else
-    {
-        this->streamerModeTitlebarIcon_->setPixmap(
-            getResources().buttons.streamerModeEnabledDark);
-    }
-    this->streamerModeTitlebarIcon_->setVisible(
-        getApp()->getStreamerMode()->isEnabled());
-#else
-    // clang-format off
-    assert(false && "Streamer mode TitleBar icon should not exist on non-Windows OSes");
-    // clang-format on
-#endif
-}
-
 void Window::themeChangedEvent()
 {
-    this->updateStreamerModeIcon();
     BaseWindow::themeChangedEvent();
 }
 
@@ -378,8 +291,9 @@ void Window::addShortcuts()
              return "";
          }},
         {"openAccountSelector",  // Open account selector
-         [](const std::vector<QString> &) -> QString {
-             getApp()->getWindows()->showAccountSelectPopup({0, 0});
+         [this](const std::vector<QString> &) -> QString {
+             getApp()->getWindows()->showAccountSelectPopup(
+                 this->mapToGlobal(QPoint(12, this->height() - 12)), this);
              return "";
          }},
         {"newSplit",  // Create a new split
@@ -430,16 +344,6 @@ void Window::addShortcuts()
                          .arg(target);
                  }
              }
-             return "";
-         }},
-        {"selectTabHistoryBack",
-         [this](const std::vector<QString> &) -> QString {
-             this->notebook_->selectHistoryBack(true);
-             return "";
-         }},
-        {"selectTabHistoryForward",
-         [this](const std::vector<QString> &) -> QString {
-             this->notebook_->selectHistoryForward(true);
              return "";
          }},
         {"popup",
@@ -557,6 +461,11 @@ void Window::addShortcuts()
          }},
         {"openQuickSwitcher",
          [this](std::vector<QString>) -> QString {
+             if (auto *shell = this->findChild<ChoppaShell *>())
+             {
+                 shell->focusNavigation();
+                 return "";
+             }
              auto *quickSwitcher = new QuickSwitcherPopup(this);
              quickSwitcher->show();
              return "";
@@ -806,7 +715,7 @@ void Window::onAccountSelected()
     auto user = getApp()->getAccounts()->twitch.getCurrent();
 
     // update title (also append username on Linux and MacOS)
-    QString windowTitle = Version::instance().fullVersion();
+    QString windowTitle = "choppa.lol | chat";
 
 #if defined(Q_OS_LINUX) || defined(Q_OS_MACOS)
     if (user->isAnon())
@@ -825,19 +734,6 @@ void Window::onAccountSelected()
     }
 
     this->setWindowTitle(windowTitle);
-
-    // update user
-    if (this->userLabel_)
-    {
-        if (user->isAnon())
-        {
-            this->userLabel_->setText("anonymous");
-        }
-        else
-        {
-            this->userLabel_->setText(user->getUserName());
-        }
-    }
 }
 
 }  // namespace chatterino

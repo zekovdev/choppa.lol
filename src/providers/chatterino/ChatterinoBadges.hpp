@@ -29,8 +29,6 @@ public:
     IChatterinoBadges &operator=(IChatterinoBadges &&) = delete;
 
     virtual std::optional<EmotePtr> getBadge(const UserId &id) = 0;
-    virtual EmotePtr getKickBadge(uint64_t kickID) = 0;
-    virtual void setKickMapping(const QString &twitchID, uint64_t kickID) = 0;
 };
 
 class ChatterinoBadges : public IChatterinoBadges
@@ -46,10 +44,6 @@ public:
      */
     std::optional<EmotePtr> getBadge(const UserId &id) override;
 
-    EmotePtr getKickBadge(uint64_t kickID) override;
-
-    void setKickMapping(const QString &twitchID, uint64_t kickID) override;
-
 private:
     void loadChatterinoBadges();
 
@@ -60,8 +54,6 @@ private:
      * Guarded by mutex_
      */
     std::unordered_map<QString, int> badgeMap;
-
-    std::unordered_map<uint64_t, int> kickMapping;
 
     /**
      * Keeps a list of badges.

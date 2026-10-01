@@ -23,60 +23,38 @@
 #include "widgets/helper/ChannelView.hpp"
 #include "widgets/splits/Split.hpp"
 
+#include <QElapsedTimer>
 #include <QHBoxLayout>
+#include <QLabel>
 #include <QLineEdit>
 #include <QPushButton>
+#include <QSet>
 
 namespace chatterino {
-
-ChannelPtr SearchPopup::filter(const QString &text, const QString &channelName,
-                               const std::vector<MessagePtr> &snapshot)
-{
-    ChannelPtr channel(new Channel(channelName, Channel::Type::None));
-
-    // Parse predicates from tags in "text"
-    auto predicates = parsePredicates(text);
-
-    // Check for every message whether it fulfills all predicates that have
-    // been registered
-    for (size_t i = 0; i < snapshot.size(); ++i)
-    {
-        MessagePtr message = snapshot[i];
-
-        bool accept = true;
-        for (const auto &pred : predicates)
-        {
-            // Discard the message as soon as one predicate fails
-            if (!pred->appliesTo(*message))
-            {
-                accept = false;
-                break;
-            }
-        }
-
-        // If all predicates match, add the message to the channel
-        if (accept)
-        {
-            auto overrideFlags = std::optional<MessageFlags>(message->flags);
-            overrideFlags->set(MessageFlag::DoNotLog);
-
-            channel->addMessage(message, MessageContext::Repost, overrideFlags);
-        }
-    }
-
-    return channel;
-}
 
 SearchPopup::SearchPopup(QWidget *parent, Split *split)
     : BasePopup(
           {
               BaseWindow::DisableLayoutSave,
               BaseWindow::BoundsCheckOnShow,
+              BaseWindow::EnableCustomFrame,
+              BaseWindow::ContentChrome,
           },
           parent)
     , split_(split)
 {
     this->initLayout();
+    this->setObjectName("choppaSearch");
+    this->getLayoutContainer()->setObjectName("searchContent");
+    this->setStyleSheet(this->styleSheet() + QStringLiteral(R"(
+        #choppaSearch, #choppaSearch #searchContent { background: #111111; }
+        #choppaSearch QLineEdit { font: 700 12px 'Satoshi'; color: #eeeeee; background: #1a1a1a; border: 1px solid #383838; border-radius: 6px; padding: 6px 8px; selection-background-color: #444444; }
+        #choppaSearch QLineEdit:focus { border-color: #888888; }
+        #choppaSearch QLabel#searchStatus { color: #a0a0a0; background: transparent; padding: 0 8px 6px; }
+    )"));
+    this->SearchTimer.setSingleShot(true);
+    connect(&this->SearchTimer, &QTimer::timeout, this,
+            &SearchPopup::ContinueSearch);
     if (this->split_ && this->split_->getChannelView().hasSelection())
     {
         this->searchInput_->setText(
@@ -88,6 +66,8 @@ SearchPopup::SearchPopup(QWidget *parent, Split *split)
 
     this->themeChangedEvent();
 }
+
+SearchPopup::~SearchPopup() = default;
 
 void SearchPopup::addShortcuts()
 {
@@ -133,6 +113,7 @@ void SearchPopup::addChannel(ChannelView &channel)
     }
 
     this->searchChannels_.append(std::ref(channel));
+    this->snapshot_.clear();
 
     this->updateWindowTitle();
 }
@@ -204,6 +185,14 @@ void SearchPopup::showEvent(QShowEvent *e)
     BaseWindow::showEvent(e);
 }
 
+void SearchPopup::hideEvent(QHideEvent *Event)
+{
+    this->SearchTimer.stop();
+    this->SearchResults.reset();
+    this->SearchPredicates.clear();
+    BasePopup::hideEvent(Event);
+}
+
 bool SearchPopup::eventFilter(QObject *object, QEvent *event)
 {
     if (object == this->searchInput_ && event->type() == QEvent::KeyPress)
@@ -233,8 +222,54 @@ void SearchPopup::search()
         this->snapshot_ = this->buildSnapshot();
     }
 
-    this->channelView_->setChannel(filter(this->searchInput_->text(),
-                                          this->channelName_, this->snapshot_));
+    this->SearchTimer.stop();
+    this->SearchPredicates = parsePredicates(this->searchInput_->text());
+    this->SearchIndex = 0;
+    this->SearchMatches = 0;
+    this->SearchResults =
+        std::make_shared<Channel>(this->channelName_, Channel::Type::None);
+    this->SearchStatus->setText(tr("Searching"));
+    this->SearchTimer.start(0);
+}
+
+void SearchPopup::ContinueSearch()
+{
+    if (!this->SearchResults)
+        return;
+    QElapsedTimer Budget;
+    Budget.start();
+    while (this->SearchIndex < this->snapshot_.size())
+    {
+        const auto &Message = this->snapshot_[this->SearchIndex++];
+        if (std::all_of(this->SearchPredicates.begin(),
+                        this->SearchPredicates.end(),
+                        [&Message](const auto &Predicate) {
+                            return Predicate->appliesTo(*Message);
+                        }))
+        {
+            auto Flags = std::optional<MessageFlags>(Message->flags);
+            Flags->set(MessageFlag::DoNotLog);
+            this->SearchResults->addMessage(Message, MessageContext::Repost,
+                                            Flags);
+            ++this->SearchMatches;
+        }
+        if (this->SearchIndex % 64 == 0 && Budget.elapsed() >= 4)
+        {
+            this->SearchTimer.start(0);
+            return;
+        }
+    }
+    this->channelView_->setChannel(this->SearchResults);
+    const auto Retained = this->SearchResults->countMessages();
+    this->SearchStatus->setText(
+        this->SearchMatches == 0 ? tr("No matching messages")
+        : Retained < this->SearchMatches
+            ? tr("%1 matches, latest %2 shown")
+                  .arg(this->SearchMatches)
+                  .arg(Retained)
+            : tr("%1 matching messages").arg(this->SearchMatches));
+    this->SearchResults.reset();
+    this->SearchPredicates.clear();
 }
 
 std::vector<MessagePtr> SearchPopup::buildSnapshot()
@@ -247,6 +282,7 @@ std::vector<MessagePtr> SearchPopup::buildSnapshot()
     }
 
     auto combinedSnapshot = std::vector<std::shared_ptr<const Message>>{};
+    QSet<QString> SeenIds;
     for (auto &channel : this->searchChannels_)
     {
         ChannelView &sharedView = channel.get();
@@ -263,24 +299,16 @@ std::vector<MessagePtr> SearchPopup::buildSnapshot()
                 continue;
             }
 
+            if (!message->id.isEmpty())
+            {
+                if (SeenIds.contains(message->id))
+                    continue;
+                SeenIds.insert(message->id);
+            }
+
             combinedSnapshot.push_back(message);
         }
     }
-
-    // remove any duplicate messages from splits containing the same channel
-    std::sort(combinedSnapshot.begin(), combinedSnapshot.end(),
-              [](MessagePtr &a, MessagePtr &b) {
-                  return a->id > b->id;
-              });
-
-    auto uniqueIterator =
-        std::unique(combinedSnapshot.begin(), combinedSnapshot.end(),
-                    [](MessagePtr &a, MessagePtr &b) {
-                        // nullptr check prevents system messages from being dropped
-                        return (a->id != nullptr) && a->id == b->id;
-                    });
-
-    combinedSnapshot.erase(uniqueIterator, combinedSnapshot.end());
 
     // resort by time for presentation
     std::sort(combinedSnapshot.begin(), combinedSnapshot.end(),
@@ -295,7 +323,7 @@ void SearchPopup::initLayout()
 {
     // VBOX
     {
-        auto *layout1 = new QVBoxLayout(this);
+        auto *layout1 = new QVBoxLayout(this->getLayoutContainer());
         layout1->setContentsMargins(0, 0, 0, 0);
         layout1->setSpacing(0);
 
@@ -311,6 +339,7 @@ void SearchPopup::initLayout()
                 layout2->addWidget(this->searchInput_);
 
                 this->searchInput_->setPlaceholderText("Type to search");
+                this->searchInput_->setAccessibleName(tr("Search messages"));
                 this->searchInput_->setClearButtonEnabled(true);
                 this->searchInput_->findChild<QAbstractButton *>()->setIcon(
                     QPixmap(":/buttons/clearSearch.png"));
@@ -320,6 +349,10 @@ void SearchPopup::initLayout()
             }
 
             layout1->addLayout(layout2);
+            this->SearchStatus = new QLabel(this);
+            this->SearchStatus->setObjectName("searchStatus");
+            this->SearchStatus->setAccessibleName(tr("Search status"));
+            layout1->addWidget(this->SearchStatus);
         }
 
         // CHANNELVIEW
@@ -328,10 +361,8 @@ void SearchPopup::initLayout()
                 this, this->split_, ChannelView::Context::Search,
                 getSettings()->scrollbackSplitLimit);
 
-            layout1->addWidget(this->channelView_);
+            layout1->addWidget(this->channelView_, 1);
         }
-
-        this->setLayout(layout1);
     }
 
     this->searchInput_->setFocus();

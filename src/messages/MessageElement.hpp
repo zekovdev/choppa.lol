@@ -10,6 +10,7 @@
 #include "messages/MessageColor.hpp"
 #include "providers/links/LinkInfo.hpp"
 #include "singletons/Fonts.hpp"
+#include "util/DebugCount.hpp"
 
 #include <magic_enum/magic_enum.hpp>
 #include <pajlada/signals/signalholder.hpp>
@@ -48,7 +49,7 @@ enum class MessageElementFlag : int64_t {
     EmoteText = (1LL << 5),
     Emote = EmoteImage | EmoteText,
 
-    TwitchGif = (1LL << 7),
+    // unused: (1LL << 7),
 
     ChannelPointReward = (1LL << 8),
     ChannelPointRewardImage = ChannelPointReward | EmoteImage,
@@ -157,18 +158,6 @@ enum class MessageElementFlag : int64_t {
 
     // (1LL << 36) is occupied by BadgeSevenTV
 
-    /// The timestamp in the header (i.e. top part of the "Announcement" message)
-    HeaderTimestamp = (1LL << 38),
-
-    /// Applied to all elements of the announcement header
-    AnnouncementHeader = (1LL << 39),
-
-    /// Applied to all elements of subscription and resubscription headers
-    SubscriptionHeader = (1LL << 40),
-
-    /// Applied to all elements of watch streak headers
-    WatchStreakHeader = (1LL << 41),
-
     /// `Username` but the username comes from Kick
     KickUsername = (1LL << 50),
 
@@ -219,22 +208,12 @@ public:
     /// Creates a new identical message element.
     virtual std::unique_ptr<MessageElement> clone() const = 0;
 
-    /// When this element is added to a container, this decides whether the flag check
-    /// should require the context flags to contain all flags of this element (true), as opposed
-    /// to the context flag containing at least one of the flags of this element (false).
-    bool exhaustiveFlags = false;
-
 protected:
     MessageElement(MessageElementFlags flags);
     bool trailingSpace = true;
 
     /// Copy MessageElement private data from `source` to this MessageElement
     void cloneFrom(const MessageElement &source);
-
-    /// Checks if the given flags from the layout context matches the flags of this element.
-    ///
-    /// Takes `exhaustiveFlags` into consideration.
-    bool matchesFlags(MessageElementFlags contextFlags) const;
 
 private:
     Link link_;
@@ -472,18 +451,15 @@ class MentionElement : public TextElement
 public:
     static constexpr std::string_view TYPE = "mention";
 
-    explicit MentionElement(
-        const QString &displayName, QString loginName_,
-        const MessageColor &fallbackColor_, const MessageColor &userColor_,
-        MessageElementFlags messageFlags = MessageElementFlags{
-            MessageElementFlag::Text, MessageElementFlag::Mention});
+    explicit MentionElement(const QString &displayName, QString loginName_,
+                            const MessageColor &fallbackColor_,
+                            const MessageColor &userColor_);
 
     /// This is intended only for cloning the element.
     explicit MentionElement(TextElement::CloneTag, QStringList words,
                             QString loginName_,
                             const MessageColor &fallbackColor_,
-                            const MessageColor &userColor_,
-                            MessageElementFlags messageFlags);
+                            const MessageColor &userColor_);
     /// Deprioritized ctor allowing us to pass through a potentially invalid userColor_
     ///
     /// If the userColor_ is invalid, we fall back to the fallbackColor_
@@ -636,6 +612,7 @@ public:
     std::unique_ptr<MessageElement> clone() const override;
 
 protected:
+    explicit BadgeElement(MessageElementFlags flags_);
     virtual MessageLayoutElement *makeImageLayoutElement(const ImagePtr &image,
                                                          QSizeF size);
     EmotePtr emote_;
@@ -691,22 +668,32 @@ protected:
     const QColor color;
 };
 
+class SeventvBadgeElement : public BadgeElement
+{
+public:
+    static constexpr std::string_view TYPE = "seventv-badge";
+
+    SeventvBadgeElement(QString userID, MessageElementFlags flags_);
+
+    void addToContainer(MessageLayoutContainer &container,
+                        const MessageLayoutContext &ctx) override;
+
+    QJsonObject toJson() const override;
+    std::string_view type() const override;
+    std::unique_ptr<MessageElement> clone() const override;
+
+private:
+    QString userID_;
+};
+
 // contains a text, formated depending on the preferences
 class TimestampElement : public MessageElement
 {
-protected:
-    struct CloneConstructorTag {
-    };
-
 public:
     static constexpr std::string_view TYPE = "timestamp";
 
     TimestampElement();
     TimestampElement(QTime time_);
-    TimestampElement(QTime time_, MessageElementFlags extraFlags);
-    /// This is intended only for cloning the element.
-    TimestampElement(TimestampElement::CloneConstructorTag, QTime time_,
-                     MessageElementFlags flags);
     ~TimestampElement() override = default;
 
     void addToContainer(MessageLayoutContainer &container,

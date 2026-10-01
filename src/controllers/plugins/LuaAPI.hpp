@@ -95,11 +95,9 @@ sol::table toTable(lua_State *L, const CompletionEvent &ev);
  * @includefile controllers/plugins/api/Accounts.hpp
  * @includefile controllers/plugins/api/ChannelRef.hpp
  * @includefile controllers/plugins/api/ConnectionHandle.hpp
- * @includefile controllers/plugins/api/DateTime.hpp
  * @includefile controllers/plugins/api/HTTPResponse.hpp
  * @includefile controllers/plugins/api/HTTPRequest.hpp
  * @includefile controllers/plugins/api/Images.hpp
- * @includefile controllers/plugins/api/Menu.hpp
  * @includefile controllers/plugins/api/Message.hpp
  * @includefile controllers/plugins/api/WebSocket.hpp
  * @includefile controllers/plugins/api/WindowManager.hpp

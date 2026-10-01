@@ -50,6 +50,9 @@ public:
     /// @returns The badge's ID
     QString registerBadge(const QJsonObject &badgeJson);
 
+    /// Whether a badge with this ID is already known
+    bool hasBadge(const QString &badgeID) const;
+
 protected:
     BadgeRegistry() = default;
 

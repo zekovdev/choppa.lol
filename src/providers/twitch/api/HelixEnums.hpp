@@ -211,6 +211,7 @@ enum class HelixWhisperError : std::uint8_t {
 
 enum class HelixGetChattersError : std::uint8_t {
     Unknown,
+    Ratelimited,
     UserMissingScope,
     UserNotAuthorized,
 
@@ -220,6 +221,7 @@ enum class HelixGetChattersError : std::uint8_t {
 
 enum class HelixGetModeratorsError : std::uint8_t {
     Unknown,
+    Ratelimited,
     UserMissingScope,
     UserNotAuthorized,
 
@@ -322,16 +324,6 @@ enum class HelixUnpinMessageError : std::uint8_t {
     MissingScope,
     Forbidden,
     NotFound,
-
-    // The error message is forwarded directly from the Twitch API
-    Forwarded,
-};
-
-enum class HelixGetSharedChatSessionError : std::uint8_t {
-    Unknown,
-    InvalidBroadcasterId,
-    UserMissingScope,
-    UserNotAuthorized,
 
     // The error message is forwarded directly from the Twitch API
     Forwarded,
